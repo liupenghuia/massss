@@ -1,0 +1,279 @@
+# 统一错误码表（人读 + 可供 openapi.yaml $ref）
+# first release，not breaking。contracts/ 此前为空，本次全部新增。
+
+version: "1.0.0"
+breakingChange: false
+
+# 通用错误响应：所有 HTTP 错误体均为本结构。
+# { "code": "VEHICLE_NOT_FOUND", "message": "...", "details": {} }
+
+components:
+  schemas:
+    ErrorCode:
+      type: string
+      description: 稳定错误码。客户端应按 code 分支，不要解析 message（除已声明为固定文案的码）。
+      enum:
+        - VEHICLE_NOT_FOUND
+        - IMAGE_NOT_FOUND
+        - REPORT_NOT_FOUND
+        - VEHICLE_VERSION_CONFLICT
+        - ILLEGAL_STATUS_TRANSITION
+        - PUBLISHED_IMAGE_MIN
+        - IDEMPOTENCY_KEY_CONFLICT
+        - PUBLISH_PRECONDITION_FAILED
+        - VALIDATION_ERROR
+        - MISSING_VERSION
+        - IDEMPOTENCY_KEY_REQUIRED
+        - INVALID_OBJECT_KEY
+        - INVALID_CONTENT_TYPE
+        - FILE_TOO_LARGE
+        - IMAGE_ORDER_MISMATCH
+        - OBJECT_NOT_UPLOADED
+        - UNAUTHORIZED
+        - INTERNAL_ERROR
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message, details]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          description: 面向调用方的说明。VEHICLE_VERSION_CONFLICT、PUBLISHED_IMAGE_MIN 的 message 固定，不得改写。
+        details:
+          type: object
+          description: 结构化细节。无细节时必须为 {}，不得省略该字段。
+          additionalProperties: true
+
+    PublishPreconditionFailedDetails:
+      type: object
+      additionalProperties: false
+      required: [missing, imageCount, priceFilled]
+      properties:
+        missing:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [images, price]
+          description: 未满足的前置项。图片数 < 4 时含 images；价格未填写时含 price。
+        imageCount:
+          type: integer
+          minimum: 0
+          description: 当前图片数量（进程内 countImages 的成功返回值）。
+        priceFilled:
+          type: boolean
+          description: 当前是否已填价（进程内 isPriceFilled 的成功返回值；面谈视为已填写）。
+
+    IllegalStatusTransitionDetails:
+      type: object
+      additionalProperties: false
+      required: [from, action]
+      properties:
+        from:
+          type: string
+          enum: [draft, published, unpublished]
+          description: 车辆当前状态
+        action:
+          type: string
+          enum: [publish, unpublish]
+          description: 被拒绝的动作
+
+    ImageOrderMismatchDetails:
+      type: object
+      additionalProperties: false
+      properties:
+        unknownIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: 不属于该车的 id
+        missingIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: 该车已有但未出现在 imageIds 中的 id
+        duplicateIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: imageIds 中的重复 id
+
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, reason]
+      properties:
+        field:
+          type: string
+          description: JSON 字段路径，camelCase，如 initialPrice.amount
+        reason:
+          type: string
+          description: 机器可读原因，如 REQUIRED、TYPE、INAPPLICABLE_TO_ENERGY_TYPE、AMOUNT_SCALE、AMOUNT_NOT_NULL、AMOUNT_NULL_REQUIRED
+
+    ValidationErrorDetails:
+      type: object
+      additionalProperties: false
+      properties:
+        fieldErrors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+
+# ---------------------------------------------------------------------------
+# 人读码表。httpStatus 为该 code 的唯一 HTTP 映射。
+# ---------------------------------------------------------------------------
+codes:
+  - code: VEHICLE_NOT_FOUND
+    httpStatus: 404
+    fixedMessage: false
+    message: 车辆不存在
+    details: {}
+    note: |
+      管理端：路径中的车辆 id 在系统中不存在。
+      公开端：车辆不存在或当前不是 published。两种情况必须返回同一 code 与 404，禁止 403，避免泄露下架/草稿车辆是否存在。
+      公开端挂在车辆下的图片/报告/价格接口，车不可见时也用本码，不用 IMAGE_NOT_FOUND / REPORT_NOT_FOUND。
+
+  - code: IMAGE_NOT_FOUND
+    httpStatus: 404
+    fixedMessage: false
+    message: 图片不存在
+    details: {}
+    note: 仅管理端。图片 id 不存在，或不属于路径中的车辆。不得据此泄露其它车辆的图片。
+
+  - code: REPORT_NOT_FOUND
+    httpStatus: 404
+    fixedMessage: false
+    message: 评估报告不存在
+    details: {}
+    note: 仅管理端。报告 id 不存在，或不属于路径中的车辆。
+
+  - code: VEHICLE_VERSION_CONFLICT
+    httpStatus: 409
+    fixedMessage: true
+    message: 该车辆已被修改，请刷新后重试
+    details: {}
+    note: |
+      编辑车辆时 If-Match / body.version 与服务端当前 version 不一致。
+      message 固定，禁止改写。不要在 details 里回传当前 version，避免客户端不刷新直接覆盖。
+
+  - code: ILLEGAL_STATUS_TRANSITION
+    httpStatus: 409
+    fixedMessage: false
+    message: 非法的车辆状态转换
+    details:
+      $ref: "#/components/schemas/IllegalStatusTransitionDetails"
+    note: |
+      对草稿执行 unpublish 等非法转换。
+      已处于目标态的重复 publish / unpublish 不是本码，应 200 且无副作用。
+
+  - code: PUBLISHED_IMAGE_MIN
+    httpStatus: 409
+    fixedMessage: true
+    message: 已上架车辆至少保留 4 张图片，请先下架或先补充图片
+    details: {}
+    note: 已上架车辆删除图片后数量将 < 4 时拒绝本次删除。message 固定（ADR-010）。
+
+  - code: IDEMPOTENCY_KEY_CONFLICT
+    httpStatus: 409
+    fixedMessage: false
+    message: 幂等键已用于不同请求
+    details: {}
+    note: 同一 Idempotency-Key 搭配与首次成功请求不同的请求体。
+
+  - code: PUBLISH_PRECONDITION_FAILED
+    httpStatus: 422
+    fixedMessage: false
+    message: 不满足发布前置条件
+    details:
+      $ref: "#/components/schemas/PublishPreconditionFailedDetails"
+    note: |
+      草稿或已下架车辆发布/重新上架时，图片数 < 4 或价格未填写。
+      details.missing 列出 images 与/或 price，并给出 imageCount、priceFilled。
+      countImages / isPriceFilled 抛错时不得使用本码，应返回 INTERNAL_ERROR。
+
+  - code: VALIDATION_ERROR
+    httpStatus: 400
+    fixedMessage: false
+    message: 请求参数不合法
+    details:
+      $ref: "#/components/schemas/ValidationErrorDetails"
+    note: |
+      缺字段、类型不符、金额精度/正数规则、negotiable 时 amount 非 null、
+      对不适用的能源类型传入非 null 选填字段、分页参数越界、If-Match 与 body.version 不一致等。
+      写入价格时不得使用 type=unset（unset 只出现在历史记录的 from）。
+
+  - code: MISSING_VERSION
+    httpStatus: 400
+    fixedMessage: false
+    message: 编辑车辆必须提供 If-Match 或 body.version
+    details: {}
+    note: PATCH /admin/vehicles/{id} 既无 If-Match 也无 body.version。
+
+  - code: IDEMPOTENCY_KEY_REQUIRED
+    httpStatus: 400
+    fixedMessage: false
+    message: 创建车辆必须提供 Idempotency-Key
+    details: {}
+    note: POST /admin/vehicles 缺少 Idempotency-Key 请求头。
+
+  - code: INVALID_OBJECT_KEY
+    httpStatus: 400
+    fixedMessage: false
+    message: objectKey 无效或不属于该车辆
+    details: {}
+    note: 确认落库的 objectKey 未对该车辆预签名、已被其它记录使用且并非同一资源重放、或格式非法。
+
+  - code: INVALID_CONTENT_TYPE
+    httpStatus: 400
+    fixedMessage: false
+    message: 不支持的文件类型
+    details: {}
+    note: |
+      图片允许 image/jpeg、image/png、image/webp（jpg 对应 image/jpeg）。
+      评估报告允许 application/pdf、image/png、image/jpeg。
+
+  - code: FILE_TOO_LARGE
+    httpStatus: 400
+    fixedMessage: false
+    message: 文件大小超过限制
+    details: {}
+    note: 图片 byteSize > 10485760（10 MiB）；评估报告 byteSize > 20971520（20 MiB）。byteSize 必须为 > 0 的整数。
+
+  - code: IMAGE_ORDER_MISMATCH
+    httpStatus: 400
+    fixedMessage: false
+    message: imageIds 必须是该车全部图片的一个排列
+    details:
+      $ref: "#/components/schemas/ImageOrderMismatchDetails"
+    note: 排序必须一次性提交该车当前全部图片 id，不可多、不可少、不可重复。不做逐张上移。
+
+  - code: OBJECT_NOT_UPLOADED
+    httpStatus: 400
+    fixedMessage: false
+    message: 对象存储中尚未找到对应文件
+    details: {}
+    note: 预签名后尚未直传成功就确认落库。
+
+  - code: UNAUTHORIZED
+    httpStatus: 401
+    fixedMessage: false
+    message: 未登录或登录已失效
+    details: {}
+    note: 鉴权由 F-006 定稿。本期 /admin/* 假设已登录管理员；未携带有效管理员凭据时用本码。不在本期定义 403 角色分权。
+
+  - code: INTERNAL_ERROR
+    httpStatus: 500
+    fixedMessage: false
+    message: 服务内部错误
+    details: {}
+    note: |
+      基础设施失败（数据库、对象存储等）。
+      F-001 发布时 countImages / isPriceFilled 抛错必须映射为本码，
+      禁止当成「没图」或「未填价」而返回 PUBLISH_PRECONDITION_FAILED。

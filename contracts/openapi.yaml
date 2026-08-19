@@ -1,0 +1,1901 @@
+# first release，not breaking。
+# contracts/ 此前为空，本次全部新增。内部方法见 internal.yaml，错误码见 errors.yaml。
+openapi: 3.1.0
+info:
+  title: 车辆信息展示系统 HTTP 契约
+  version: 1.0.0
+  summary: F-001 / F-003 / F-004 首次落约
+  description: |
+    **first release，not breaking。** `contracts/` 此前为空，本次全部为新增。
+
+    覆盖已裁决 feature：F-001 车辆信息管理、F-003 图片与评估报告、F-004 价格记录。
+    不覆盖仍为 draft 的 F-002（前台页面结构与展示文案）、F-005（回收站）、F-006（登录与账号）。
+
+    ## 鉴权
+    `/admin/*` 均声明 `security: [adminAuth: []]`。鉴权由 F-006 定稿，本期假设已登录管理员。
+    本文件不规定登录方式、token 形态与刷新。未携带有效管理员凭据时返回 401 UNAUTHORIZED。
+    `/public/*` 无登录。前台无用户体系。
+
+    ## 错误
+    所有错误响应体：
+    `{ "code": "VEHICLE_NOT_FOUND", "message": "...", "details": {} }`
+    码表与 HTTP 映射见 `errors.yaml`。公开端对不存在或未上架车辆一律 404 VEHICLE_NOT_FOUND，禁止 403。
+
+    ## 内部方法（不是 HTTP）
+    F-001 发布反查不得走本文件 paths：
+    - `countImages(vehicleId) -> int`（F-003）
+    - `isPriceFilled(vehicleId) -> boolean`（F-004）
+    详见 `internal.yaml`。
+
+    ## 字段与范围
+    JSON 字段 camelCase。车辆资源不含价格。公开响应不得出现 vin / vinMasked。
+    不做：导出、批量改价、回收站、登录注册、软删除字段、前台文案「面议」。
+
+    ## 图片确认策略
+    预签名后，确认落库为一次一张（`adminConfirmVehicleImage` / `adminConfirmVehicleReport`），
+    由客户端循环。不使用 HTTP 207。部分失败由客户端按单张结果处理。
+    同一 objectKey 重复确认返回已落库资源（200），不创建第二条。
+
+servers:
+  - url: http://localhost:8080
+    description: 本地开发。路径无额外前缀，`/admin` 与 `/public` 位于服务根。
+  - url: https://{host}
+    description: 部署环境占位。前台域名备案是部署前置条件（ADR-011），host 本期不写死。
+    variables:
+      host:
+        default: api.example.invalid
+        description: 服务端主机名，上线时替换
+
+tags:
+  - name: admin-vehicles
+    description: F-001 车辆信息管理（管理端）
+  - name: public-vehicles
+    description: F-001 车辆信息管理（公开端）。服务端硬过滤仅 published，不接受客户端传 status。
+  - name: admin-images
+    description: F-003 车辆图片（管理端）
+  - name: admin-reports
+    description: F-003 评估报告（管理端）
+  - name: public-media
+    description: F-003 图片与评估报告（公开端）。仅 published 车辆；下架不失效已生成直链，但本接口不再返回。
+  - name: admin-prices
+    description: F-004 价格记录（管理端）
+  - name: public-prices
+    description: F-004 价格（公开端）。只返回类型 + 金额，无操作人；文案「面议」由 F-002 决定。
+
+security: []
+
+paths:
+  /admin/vehicles:
+    post:
+      tags: [admin-vehicles]
+      operationId: adminCreateVehicle
+      summary: 创建草稿车辆
+      description: |
+        创建 status=draft 的车辆。车辆 id 为系统生成的 int64 技术主键，version 从 1 起。
+        请求头 Idempotency-Key 必填；同一 Key 重放返回同一资源（首次 201，重放 200）。
+        同一 Key 搭配不同请求体 → 409 IDEMPOTENCY_KEY_CONFLICT。仅 2xx 占用该 Key，4xx 可用同一 Key 更正后重试。
+        body 可带 initialPrice（PriceValue）。若提供，须在同一事务内写入第一条价格记录（F-004）；
+        车辆资源本身不含价格字段。initialPrice 校验失败则整单失败，不创建车辆。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminVehicleCreateRequest"
+            examples:
+              gasoline:
+                summary: 汽油车草稿，带初始一口价
+                value:
+                  brand: 大众
+                  model: 帕萨特
+                  registrationYear: 2020
+                  mileageKm: 35000
+                  color: 白色
+                  conditionDesc: 车况良好，定期保养
+                  energyType: gasoline
+                  transferCount: 1
+                  displacementL: 1.8
+                  vin: LSVAM24H3BN123456
+                  initialPrice:
+                    type: amount
+                    amount: 128000.00
+              evNegotiable:
+                summary: 纯电，初始面谈
+                value:
+                  brand: 特斯拉
+                  model: Model 3
+                  registrationYear: 2022
+                  mileageKm: 12000
+                  color: 黑色
+                  conditionDesc: 无重大事故
+                  energyType: ev
+                  transferCount: 0
+                  energyConsumption: 13.2
+                  batteryKwh: 60
+                  initialPrice:
+                    type: negotiable
+                    amount: null
+      responses:
+        "201":
+          description: 首次创建成功
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              description: 新资源路径，如 `/admin/vehicles/1`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicle"
+        "200":
+          description: 幂等重放，返回首次创建的同一资源
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicle"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [admin-vehicles]
+      operationId: adminListVehicles
+      summary: 管理端车辆列表
+      description: |
+        支持按 status 筛选、按 q 关键字搜索品牌与车型（包含匹配，大小写不敏感）。
+        分页按可增长规模设计，禁止假设车辆总数不超过 100。
+        默认按 id 降序。列表项不含价格。
+      security:
+        - adminAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: 按车辆状态精确筛选。省略则不过滤状态。
+          schema:
+            $ref: "#/components/schemas/VehicleStatus"
+        - name: q
+          in: query
+          required: false
+          description: 关键字，搜索品牌、车型。空字符串视为未传。不搜 VIN、颜色或其它字段。
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: 分页列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}:
+    get:
+      tags: [admin-vehicles]
+      operationId: adminGetVehicle
+      summary: 管理端车辆详情
+      description: |
+        返回核心字段 + vinMasked（只露后六位）。不返回 vin 明文，不返回价格。
+        ETag 为当前 version，供后续 PATCH 使用。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 车辆详情
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicle"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [admin-vehicles]
+      operationId: adminPatchVehicle
+      summary: 编辑车辆核心字段
+      description: |
+        只改核心字段（含 vin），不改 status。编辑与状态转换解耦（ADR-004）。
+        乐观锁：必须提供 If-Match 或 body.version 之一；两者都提供时必须表示同一 version。
+        不一致 → 409 VEHICLE_VERSION_CONFLICT，message 固定为「该车辆已被修改，请刷新后重试」。
+        两者都缺 → 400 MISSING_VERSION。
+        省略的字段保持不变；可选字段显式 null 表示清空。
+        energyType 变更导致某选填字段不再适用时，服务端将该字段置 null；
+        若客户端在不适用时传非 null，400 VALIDATION_ERROR。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminVehiclePatchRequest"
+      responses:
+        "200":
+          description: 更新后的车辆
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicle"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/publish:
+    post:
+      tags: [admin-vehicles]
+      operationId: adminPublishVehicle
+      summary: 发布 / 重新上架
+      description: |
+        将草稿或已下架车辆变为 published。
+        已 published 时重复调用：200，无副作用，version 不变。
+        发布前置（ADR-003）：进程内调用 countImages ≥ 4 且 isPriceFilled === true。
+        任一不满足 → 422 PUBLISH_PRECONDITION_FAILED，details.missing 列出 images 与/或 price，
+        并给出 imageCount、priceFilled。
+        反查抛错 → 500 INTERNAL_ERROR，禁止当成未满足前置。
+        本动作合法来源只有 draft 与 unpublished（以及 published 幂等），无非法转换 409。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 已上架（含目标态幂等）
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicle"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "422":
+          description: 不满足发布前置条件
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              examples:
+                missingBoth:
+                  value:
+                    code: PUBLISH_PRECONDITION_FAILED
+                    message: 不满足发布前置条件
+                    details:
+                      missing: [images, price]
+                      imageCount: 2
+                      priceFilled: false
+                missingImages:
+                  value:
+                    code: PUBLISH_PRECONDITION_FAILED
+                    message: 不满足发布前置条件
+                    details:
+                      missing: [images]
+                      imageCount: 3
+                      priceFilled: true
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/unpublish:
+    post:
+      tags: [admin-vehicles]
+      operationId: adminUnpublishVehicle
+      summary: 下架
+      description: |
+        仅 published → unpublished。
+        已 unpublished 时重复调用：200，无副作用。
+        对草稿调用：409 ILLEGAL_STATUS_TRANSITION，details.from=draft，details.action=unpublish。
+        下架后 /public/* 立即不可见。图片/报告/价格不做联动处理，已生成直链不失效。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 已下架（含目标态幂等）
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicle"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          description: 非法状态转换（对草稿下架）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: ILLEGAL_STATUS_TRANSITION
+                message: 非法的车辆状态转换
+                details:
+                  from: draft
+                  action: unpublish
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /public/vehicles:
+    get:
+      tags: [public-vehicles]
+      operationId: publicListVehicles
+      summary: 公开车辆列表
+      description: |
+        仅返回 published。服务端硬过滤，不接受客户端传 status。
+        不含 vin / vinMasked / 价格 / 图片。分页按可增长规模设计。
+        默认按 id 降序。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: 已上架车辆分页列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicVehicleList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /public/vehicles/{id}:
+    get:
+      tags: [public-vehicles]
+      operationId: publicGetVehicle
+      summary: 公开车辆详情
+      description: |
+        仅 published 可访问。不存在或非 published 一律 404 VEHICLE_NOT_FOUND，禁止 403。
+        响应不得出现 vin / vinMasked。不含价格。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 已上架车辆
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicVehicle"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/images/presign:
+    post:
+      tags: [admin-images]
+      operationId: adminPresignVehicleImage
+      summary: 申请图片直传预签名 URL
+      description: |
+        车辆必须已存在（含草稿）。服务端只签发上传凭证，不落图片元数据。
+        客户端将文件直传到 uploadUrl，再调用 adminConfirmVehicleImage。
+        图片：jpg/png/webp，对应 Content-Type image/jpeg、image/png、image/webp；单张 ≤ 10 MiB（10485760 字节）。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImagePresignRequest"
+      responses:
+        "200":
+          description: 预签名成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresignResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/images:
+    post:
+      tags: [admin-images]
+      operationId: adminConfirmVehicleImage
+      summary: 确认图片落库
+      description: |
+        一次确认一张。客户端循环实现批量；不使用 207。
+        服务端确认 objectKey 属于该车的预签名且对象已出现在存储中，再写元数据。
+        caption 可省略，默认空字符串。1:1 图片说明，允许空字符串。
+        同一 objectKey 重复确认：200，返回已落库的同一图片，不创建第二条。
+        单车图片超过 100 张只告警不阻断（ADR-009）。
+        图片无独立 status，保存后立即生效。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmImageRequest"
+      responses:
+        "201":
+          description: 首次确认落库
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleImage"
+        "200":
+          description: 同一 objectKey 重复确认，返回已有图片
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleImage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [admin-images]
+      operationId: adminListVehicleImages
+      summary: 管理端列出车辆图片
+      description: 按当前排序返回该车全部图片（无独立分页）。车辆不存在 404。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 图片列表（当前顺序）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleImageList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/images/order:
+    put:
+      tags: [admin-images]
+      operationId: adminReorderVehicleImages
+      summary: 一次性提交图片全排列顺序
+      description: |
+        imageIds 必须是该车当前全部图片 id 的一个排列：不可多、不可少、不可重复。
+        事务更新。不做逐张上移，不做并发排序冲突检测（后写覆盖可接受）。
+        路径中的 `order` 是字面量，实现路由时须排在 `{imageId}` 之前。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderImagesRequest"
+      responses:
+        "200":
+          description: 更新后的完整列表（新顺序）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleImageList"
+        "400":
+          description: IMAGE_ORDER_MISMATCH 或 VALIDATION_ERROR
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/images/{imageId}:
+    patch:
+      tags: [admin-images]
+      operationId: adminPatchVehicleImageCaption
+      summary: 只改图片说明
+      description: 只能改 caption。不允许改 url、objectKey、顺序。caption 允许空字符串。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - $ref: "#/components/parameters/ImageId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchImageCaptionRequest"
+      responses:
+        "200":
+          description: 更新后的图片
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleImage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: 车辆或图片不存在
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              examples:
+                vehicle:
+                  value:
+                    code: VEHICLE_NOT_FOUND
+                    message: 车辆不存在
+                    details: {}
+                image:
+                  value:
+                    code: IMAGE_NOT_FOUND
+                    message: 图片不存在
+                    details: {}
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [admin-images]
+      operationId: adminDeleteVehicleImage
+      summary: 删除图片
+      description: |
+        物理删除元数据与对象存储文件，不做软删除、不保留历史版本。
+        替换 = 新增 + 删除，无原地覆盖。
+        已上架车辆删除后数量将 < 4 → 409 PUBLISHED_IMAGE_MIN，不得删成 3 张。
+        二次确认由管理后台 UI 负责，本接口无确认参数。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - $ref: "#/components/parameters/ImageId"
+      responses:
+        "204":
+          description: 已删除
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: 车辆或图片不存在
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+        "409":
+          description: 已上架车辆图片不得少于 4 张
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: PUBLISHED_IMAGE_MIN
+                message: 已上架车辆至少保留 4 张图片，请先下架或先补充图片
+                details: {}
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/reports/presign:
+    post:
+      tags: [admin-reports]
+      operationId: adminPresignVehicleReport
+      summary: 申请评估报告直传预签名 URL
+      description: |
+        车辆必须已存在（含草稿）。报告允许 pdf/png/jpeg，
+        Content-Type：application/pdf、image/png、image/jpeg；单份 ≤ 20 MiB（20971520 字节）。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportPresignRequest"
+      responses:
+        "200":
+          description: 预签名成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresignResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/reports:
+    post:
+      tags: [admin-reports]
+      operationId: adminConfirmVehicleReport
+      summary: 确认评估报告落库
+      description: |
+        一次确认一份。一辆车可挂多份。替换 = 新增 + 删除，无原地覆盖。
+        同一 objectKey 重复确认：200，返回已有报告。
+        报告无 caption、无手动排序。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmReportRequest"
+      responses:
+        "201":
+          description: 首次确认落库
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleReport"
+        "200":
+          description: 同一 objectKey 重复确认
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [admin-reports]
+      operationId: adminListVehicleReports
+      summary: 管理端列出评估报告
+      description: 按 uploadedAt 倒序。不支持手动排序。无分页（按该车全部报告返回）。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 报告列表（uploadedAt 倒序）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminVehicleReportList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/reports/{reportId}:
+    delete:
+      tags: [admin-reports]
+      operationId: adminDeleteVehicleReport
+      summary: 删除评估报告
+      description: 物理删除。无历史版本接口。无打包下载。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - $ref: "#/components/parameters/ReportId"
+      responses:
+        "204":
+          description: 已删除
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: 车辆或报告不存在
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              examples:
+                vehicle:
+                  value:
+                    code: VEHICLE_NOT_FOUND
+                    message: 车辆不存在
+                    details: {}
+                report:
+                  value:
+                    code: REPORT_NOT_FOUND
+                    message: 评估报告不存在
+                    details: {}
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /public/vehicles/{id}/images:
+    get:
+      tags: [public-media]
+      operationId: publicListVehicleImages
+      summary: 公开车辆图片
+      description: |
+        仅 published。车不可见 → 404 VEHICLE_NOT_FOUND（不用 IMAGE_NOT_FOUND）。
+        不返回 objectKey。按当前排序。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 图片列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicVehicleImageList"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /public/vehicles/{id}/reports:
+    get:
+      tags: [public-media]
+      operationId: publicListVehicleReports
+      summary: 公开评估报告
+      description: |
+        仅 published。车不可见 → 404 VEHICLE_NOT_FOUND。
+        按 uploadedAt 倒序。url 为原文件公开直链，前台以新标签页打开（ADR-010）。
+        不返回 objectKey。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 报告列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicVehicleReportList"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/price:
+    put:
+      tags: [admin-prices]
+      operationId: adminPutVehiclePrice
+      summary: 设置或调整当前价格
+      description: |
+        body 为 PriceValue。写路径只 INSERT 新记录；不提供修改或删除已有记录的接口，不允许清空回未填写。
+        与当前价完全相同（type + amount）：200，unchanged=true，不插行。
+        首次设价：from.type=unset，to 为本次 PriceValue。
+        面谈与数值互切算变动。
+        无备注字段。无二次确认参数。无批量改价。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceValue"
+            examples:
+              amount:
+                value:
+                  type: amount
+                  amount: 128000.00
+              negotiable:
+                value:
+                  type: negotiable
+                  amount: null
+      responses:
+        "200":
+          description: 已处理（可能未插行）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPutPriceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [admin-prices]
+      operationId: adminGetVehiclePrice
+      summary: 管理端当前价格
+      description: |
+        当前价 = 最新一条记录的 to。
+        从未设过：200，`{ "filled": false, "current": null }`（不使用 404 PRICE_NOT_SET）。
+        供验收/联调的单车只读查询。面谈算已填写。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 当前价格视图
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPriceView"
+              examples:
+                unfilled:
+                  value:
+                    filled: false
+                    current: null
+                filledAmount:
+                  value:
+                    filled: true
+                    current:
+                      type: amount
+                      amount: 128000.00
+                filledNegotiable:
+                  value:
+                    filled: true
+                    current:
+                      type: negotiable
+                      amount: null
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/price-records:
+    get:
+      tags: [admin-prices]
+      operationId: adminListVehiclePriceRecords
+      summary: 管理端单车价格记录
+      description: |
+        该车历史，按 createdAt 倒序，其次 id 倒序。可分页。
+        含 operatorId。无记录时 200，items 为空数组（不是 404）。
+        不做独立历史页所需的跨车筛选，不做导出。
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: 价格记录分页
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPriceRecordList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /public/vehicles/{id}/price:
+    get:
+      tags: [public-prices]
+      operationId: publicGetVehiclePrice
+      summary: 公开当前价格
+      description: |
+        仅 published。车不可见 → 404 VEHICLE_NOT_FOUND。
+        只返回 filled + current（type + amount）。无 operatorId。不规定「面议」文案。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+      responses:
+        "200":
+          description: 当前价格（类型 + 金额）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicPriceView"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /public/vehicles/{id}/price-records:
+    get:
+      tags: [public-prices]
+      operationId: publicListVehiclePriceRecords
+      summary: 公开价格记录
+      description: |
+        仅 published。车不可见 → 404 VEHICLE_NOT_FOUND。
+        每条只含价格类型 + 金额（from / to）及 id、createdAt；无 operatorId。
+        预留分页参数。默认条数与前台展示策略由 F-002 定，本接口不规定「最近 20 条」。
+        时间倒序。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/VehicleId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: 公开价格记录分页
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicPriceRecordList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/VehicleNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    adminAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        鉴权由 F-006 定稿，本期假设已登录管理员。
+        本 scheme 仅为 OpenAPI 占位，不规定登录方式、token / cookie / session 形态与刷新。
+        未携带有效凭据 → 401 UNAUTHORIZED。本期单一管理员角色，不定义 403。
+
+  headers:
+    ETag:
+      description: 当前车辆 version 的带引号十进制字符串，例如 `"12"`。PATCH 时可原样放入 If-Match。
+      schema:
+        type: string
+
+  parameters:
+    VehicleId:
+      name: id
+      in: path
+      required: true
+      description: 车辆技术主键（系统生成 int64）
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    ImageId:
+      name: imageId
+      in: path
+      required: true
+      description: 图片 id
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    ReportId:
+      name: reportId
+      in: path
+      required: true
+      description: 评估报告 id
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 页码，从 1 开始。超出实际页数时返回空 items，total 仍为匹配总数。
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      description: 每页条数。工程上限 100，不是车辆规模上限（ADR-007）。
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        创建车辆幂等键。同一 Key 重放返回同一车辆。
+        仅 2xx 成功响应对该 Key 生效。
+        同一 Key 搭配不同请求体 → 409 IDEMPOTENCY_KEY_CONFLICT。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: |
+        乐观锁版本。与 GET 返回的 ETag 相同格式（带引号），也接受不带引号的 version 十进制，如 `12`。
+        与 body.version 二选一必填；同时提供时必须表示同一值，否则 400 VALIDATION_ERROR。
+        不支持 `*`。
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: 请求不合法（VALIDATION_ERROR / MISSING_VERSION / IDEMPOTENCY_KEY_REQUIRED / INVALID_OBJECT_KEY / INVALID_CONTENT_TYPE / FILE_TOO_LARGE / IMAGE_ORDER_MISMATCH / OBJECT_NOT_UPLOADED）
+      content:
+        application/json:
+          schema:
+            $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: 未登录或登录已失效
+      content:
+        application/json:
+          schema:
+            $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+          example:
+            code: UNAUTHORIZED
+            message: 未登录或登录已失效
+            details: {}
+    VehicleNotFound:
+      description: 车辆不存在；公开端亦覆盖非 published
+      content:
+        application/json:
+          schema:
+            $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+          example:
+            code: VEHICLE_NOT_FOUND
+            message: 车辆不存在
+            details: {}
+    Conflict:
+      description: 冲突（VEHICLE_VERSION_CONFLICT / IDEMPOTENCY_KEY_CONFLICT / ILLEGAL_STATUS_TRANSITION / PUBLISHED_IMAGE_MIN）
+      content:
+        application/json:
+          schema:
+            $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+    InternalError:
+      description: 服务内部错误。发布反查失败不得降级为前置条件失败。
+      content:
+        application/json:
+          schema:
+            $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+          example:
+            code: INTERNAL_ERROR
+            message: 服务内部错误
+            details: {}
+
+  schemas:
+    VehicleStatus:
+      type: string
+      description: 车辆状态。draft 草稿 / published 已上架 / unpublished 已下架。不支持已下架退回草稿。
+      enum: [draft, published, unpublished]
+
+    EnergyType:
+      type: string
+      description: |
+        能源类型。
+        gasoline=汽油，ev=纯电，phev=插电混动，range_extender=增程式。
+        选填联动：
+        - displacementL 适用于 gasoline / phev / range_extender
+        - energyConsumption、batteryKwh 适用于 ev / phev / range_extender
+      enum: [gasoline, ev, phev, range_extender]
+
+    AdminVehicle:
+      type: object
+      additionalProperties: false
+      description: |
+        管理端车辆资源。含 vinMasked，不含 vin 明文，不含价格。
+        vinMasked 规则：vin 为 null 则本字段为 null；否则保留末最多 6 位明文，其余为 `*`。
+      required:
+        - id
+        - status
+        - version
+        - brand
+        - model
+        - registrationYear
+        - mileageKm
+        - color
+        - conditionDesc
+        - energyType
+        - transferCount
+        - displacementL
+        - energyConsumption
+        - batteryKwh
+        - vinMasked
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 系统生成的技术主键，跨 feature 关联锚点
+        status:
+          $ref: "#/components/schemas/VehicleStatus"
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 乐观锁版本。创建时为 1。实际修改后递增。
+        brand:
+          type: string
+          minLength: 1
+          description: 品牌
+        model:
+          type: string
+          minLength: 1
+          description: 车型
+        registrationYear:
+          type: integer
+          description: 上牌年份（公元纪年）
+        mileageKm:
+          type: integer
+          minimum: 0
+          description: 里程（千米）
+        color:
+          type: string
+          description: 颜色
+        conditionDesc:
+          type: string
+          description: 车况描述（整车说明，不是图片说明）
+        energyType:
+          $ref: "#/components/schemas/EnergyType"
+        transferCount:
+          type: integer
+          minimum: 0
+          description: 过户次数（手数）
+        displacementL:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 排量（升）。gasoline / phev / range_extender 适用；ev 时为 null。
+        energyConsumption:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电耗。ev / phev / range_extender 适用；gasoline 时为 null。单位本期不枚举。
+        batteryKwh:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电池度数（kWh）。ev / phev / range_extender 适用；gasoline 时为 null。
+        vinMasked:
+          type: [string, "null"]
+          description: VIN 脱敏，只露后六位。后台展示用。公开接口不得出现本字段。
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PublicVehicle:
+      type: object
+      additionalProperties: false
+      description: 公开车辆资源。不得包含 vin、vinMasked、version、价格。status 恒为 published。
+      required:
+        - id
+        - status
+        - brand
+        - model
+        - registrationYear
+        - mileageKm
+        - color
+        - conditionDesc
+        - energyType
+        - transferCount
+        - displacementL
+        - energyConsumption
+        - batteryKwh
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        status:
+          type: string
+          enum: [published]
+          description: 公开端恒为 published
+        brand:
+          type: string
+          description: 品牌
+        model:
+          type: string
+          description: 车型
+        registrationYear:
+          type: integer
+          description: 上牌年份（公元纪年）
+        mileageKm:
+          type: integer
+          minimum: 0
+          description: 里程（千米）
+        color:
+          type: string
+          description: 颜色
+        conditionDesc:
+          type: string
+          description: 车况描述
+        energyType:
+          $ref: "#/components/schemas/EnergyType"
+        transferCount:
+          type: integer
+          minimum: 0
+          description: 过户次数（手数）
+        displacementL:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 排量（升）。不适用时为 null。
+        energyConsumption:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电耗。不适用时为 null。
+        batteryKwh:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电池度数（kWh）。不适用时为 null。
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminVehicleCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - brand
+        - model
+        - registrationYear
+        - mileageKm
+        - color
+        - conditionDesc
+        - energyType
+        - transferCount
+      properties:
+        brand:
+          type: string
+          minLength: 1
+          description: 品牌
+        model:
+          type: string
+          minLength: 1
+          description: 车型
+        registrationYear:
+          type: integer
+          description: 上牌年份（公元纪年）
+        mileageKm:
+          type: integer
+          minimum: 0
+          description: 里程（千米）
+        color:
+          type: string
+          minLength: 1
+          description: 颜色
+        conditionDesc:
+          type: string
+          minLength: 1
+          description: 车况描述
+        energyType:
+          $ref: "#/components/schemas/EnergyType"
+        transferCount:
+          type: integer
+          minimum: 0
+          description: 过户次数（手数）
+        displacementL:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 排量（升）。gasoline / phev / range_extender 适用。
+        energyConsumption:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电耗。ev / phev / range_extender 适用。
+        batteryKwh:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电池度数（kWh）。ev / phev / range_extender 适用。
+        vin:
+          type: [string, "null"]
+          description: 车架号，可空，不要求全局唯一。仅写入；读取返回 vinMasked。
+        initialPrice:
+          $ref: "#/components/schemas/PriceValue"
+          description: 可选。创建草稿时内部同步第一条价格记录。不写入车辆表。
+
+    AdminVehiclePatchRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        部分更新。禁止出现 status、id、vinMasked、createdAt、updatedAt、价格字段。
+        version 可与 If-Match 二选一。
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 乐观锁。可与 If-Match 二选一。
+        brand:
+          type: string
+          minLength: 1
+          description: 品牌
+        model:
+          type: string
+          minLength: 1
+          description: 车型
+        registrationYear:
+          type: integer
+          description: 上牌年份
+        mileageKm:
+          type: integer
+          minimum: 0
+          description: 里程（千米）
+        color:
+          type: string
+          minLength: 1
+          description: 颜色
+        conditionDesc:
+          type: string
+          minLength: 1
+          description: 车况描述
+        energyType:
+          $ref: "#/components/schemas/EnergyType"
+        transferCount:
+          type: integer
+          minimum: 0
+          description: 过户次数（手数）
+        displacementL:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 排量（升）。不适用时显式 null 可清空。
+        energyConsumption:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电耗。不适用时显式 null 可清空。
+        batteryKwh:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电池度数（kWh）。不适用时显式 null 可清空。
+        vin:
+          type: [string, "null"]
+          description: 车架号。显式 null 表示清空。
+
+    AdminVehicleList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminVehicle"
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+          description: 符合筛选条件的总条数
+
+    PublicVehicleList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicVehicle"
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+
+    ImageContentType:
+      type: string
+      description: 图片 MIME。jpg 对应 image/jpeg。
+      enum: [image/jpeg, image/png, image/webp]
+
+    ReportContentType:
+      type: string
+      description: 评估报告 MIME。
+      enum: [application/pdf, image/png, image/jpeg]
+
+    ImagePresignRequest:
+      type: object
+      additionalProperties: false
+      required: [contentType, byteSize]
+      properties:
+        contentType:
+          $ref: "#/components/schemas/ImageContentType"
+        byteSize:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+          maximum: 10485760
+          description: 声明的文件字节数。必须 > 0 且 ≤ 10485760。
+
+    ReportPresignRequest:
+      type: object
+      additionalProperties: false
+      required: [contentType, byteSize]
+      properties:
+        contentType:
+          $ref: "#/components/schemas/ReportContentType"
+        byteSize:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+          maximum: 20971520
+          description: 声明的文件字节数。必须 > 0 且 ≤ 20971520。
+
+    PresignResponse:
+      type: object
+      additionalProperties: false
+      required: [uploadUrl, objectKey, expiresAt, requiredHeaders]
+      properties:
+        uploadUrl:
+          type: string
+          format: uri
+          description: 预签名上传 URL。客户端直传对象存储，不经过本服务。
+        objectKey:
+          type: string
+          minLength: 1
+          description: 确认落库时原样回传。
+        expiresAt:
+          type: string
+          format: date-time
+          description: 预签名过期时间。
+        requiredHeaders:
+          type: object
+          additionalProperties:
+            type: string
+          description: 直传到 uploadUrl 时必须原样带上的请求头（通常含 Content-Type）。
+
+    ConfirmImageRequest:
+      type: object
+      additionalProperties: false
+      required: [objectKey]
+      properties:
+        objectKey:
+          type: string
+          minLength: 1
+        caption:
+          type: string
+          description: 图片说明。省略视为空字符串。
+
+    ConfirmReportRequest:
+      type: object
+      additionalProperties: false
+      required: [objectKey]
+      properties:
+        objectKey:
+          type: string
+          minLength: 1
+
+    PatchImageCaptionRequest:
+      type: object
+      additionalProperties: false
+      required: [caption]
+      properties:
+        caption:
+          type: string
+          description: 图片说明，允许空字符串。
+
+    ReorderImagesRequest:
+      type: object
+      additionalProperties: false
+      required: [imageIds]
+      properties:
+        imageIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+          description: 必须是该车当前全部图片 id 的一个排列。
+
+    AdminVehicleImage:
+      type: object
+      additionalProperties: false
+      required: [id, vehicleId, objectKey, url, caption, contentType, byteSize, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        vehicleId:
+          type: integer
+          format: int64
+          minimum: 1
+        objectKey:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: 公开直链。车辆下架后本链接不失效，但 /public/* 不再返回该资源。
+        caption:
+          type: string
+          description: 1:1 图片说明，允许空字符串。
+        contentType:
+          $ref: "#/components/schemas/ImageContentType"
+        byteSize:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        createdAt:
+          type: string
+          format: date-time
+          description: 确认落库时间。
+
+    PublicVehicleImage:
+      type: object
+      additionalProperties: false
+      description: 公开图片。不含 objectKey。
+      required: [id, url, caption, contentType, byteSize, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        url:
+          type: string
+          format: uri
+        caption:
+          type: string
+        contentType:
+          $ref: "#/components/schemas/ImageContentType"
+        byteSize:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminVehicleImageList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminVehicleImage"
+          description: 按当前排序
+
+    PublicVehicleImageList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicVehicleImage"
+
+    AdminVehicleReport:
+      type: object
+      additionalProperties: false
+      required: [id, vehicleId, objectKey, url, contentType, byteSize, uploadedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        vehicleId:
+          type: integer
+          format: int64
+          minimum: 1
+        objectKey:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: 原文件公开直链，前台新标签页打开。下架不失效。
+        contentType:
+          $ref: "#/components/schemas/ReportContentType"
+        byteSize:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        uploadedAt:
+          type: string
+          format: date-time
+          description: 确认落库时间。列表按此倒序。
+
+    PublicVehicleReport:
+      type: object
+      additionalProperties: false
+      description: 公开评估报告。不含 objectKey。
+      required: [id, url, contentType, byteSize, uploadedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        url:
+          type: string
+          format: uri
+        contentType:
+          $ref: "#/components/schemas/ReportContentType"
+        byteSize:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        uploadedAt:
+          type: string
+          format: date-time
+
+    AdminVehicleReportList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminVehicleReport"
+          description: 按 uploadedAt 倒序
+
+    PublicVehicleReportList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicVehicleReport"
+
+    PriceValue:
+      description: |
+        可写入的价格。人民币元，最多 2 位小数，必须 > 0，不设上限。
+        type=amount 时 amount 为数字；type=negotiable（面谈）时 amount 必须为 null。
+        不允许 type=unset（unset 只出现在历史记录的 from）。
+        不规定前台「面议」文案。
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, amount]
+          properties:
+            type:
+              type: string
+              const: amount
+            amount:
+              type: number
+              exclusiveMinimum: 0
+              multipleOf: 0.01
+              description: 人民币元
+        - type: object
+          additionalProperties: false
+          required: [type, amount]
+          properties:
+            type:
+              type: string
+              const: negotiable
+              description: 面谈
+            amount:
+              type: "null"
+
+    PriceFrom:
+      description: 记录的变动前值。首次设价为 { type: unset }（显式未填写，不是 0、不是空字符串）。
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, amount]
+          properties:
+            type:
+              type: string
+              const: amount
+            amount:
+              type: number
+              exclusiveMinimum: 0
+              multipleOf: 0.01
+        - type: object
+          additionalProperties: false
+          required: [type, amount]
+          properties:
+            type:
+              type: string
+              const: negotiable
+            amount:
+              type: "null"
+        - type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type:
+              type: string
+              const: unset
+              description: 显式未填写
+            amount:
+              type: "null"
+
+    AdminPriceView:
+      type: object
+      additionalProperties: false
+      required: [filled, current]
+      properties:
+        filled:
+          type: boolean
+          description: 该车是否至少有一条价格记录
+        current:
+          description: 最新记录的 to。filled=false 时必须为 null。
+          oneOf:
+            - $ref: "#/components/schemas/PriceValue"
+            - type: "null"
+
+    PublicPriceView:
+      type: object
+      additionalProperties: false
+      description: 与管理端视图相同的结构，但不含操作人。只有类型 + 金额。
+      required: [filled, current]
+      properties:
+        filled:
+          type: boolean
+        current:
+          oneOf:
+            - $ref: "#/components/schemas/PriceValue"
+            - type: "null"
+
+    AdminPutPriceResponse:
+      type: object
+      additionalProperties: false
+      required: [unchanged, filled, current]
+      properties:
+        unchanged:
+          type: boolean
+          description: true 表示与当前价完全相同，未插入新行
+        filled:
+          type: boolean
+          description: 成功后恒为 true（不允许清空）
+        current:
+          $ref: "#/components/schemas/PriceValue"
+
+    AdminPriceRecord:
+      type: object
+      additionalProperties: false
+      required: [id, vehicleId, from, to, createdAt, operatorId]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        vehicleId:
+          type: integer
+          format: int64
+          minimum: 1
+        from:
+          $ref: "#/components/schemas/PriceFrom"
+          description: 变动前
+        to:
+          $ref: "#/components/schemas/PriceValue"
+          description: 变动后。当前价取最新一条的 to。
+        createdAt:
+          type: string
+          format: date-time
+        operatorId:
+          type: string
+          minLength: 1
+          description: 登录账号标识。具体形态由 F-006 定稿；本期为已登录管理员的不透明标识。公开响应不得出现本字段。
+
+    PublicPriceRecord:
+      type: object
+      additionalProperties: false
+      description: 公开价格记录。无 operatorId。价格只含类型 + 金额。
+      required: [id, from, to, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        from:
+          $ref: "#/components/schemas/PriceFrom"
+        to:
+          $ref: "#/components/schemas/PriceValue"
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminPriceRecordList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminPriceRecord"
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+
+    PublicPriceRecordList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicPriceRecord"
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+
