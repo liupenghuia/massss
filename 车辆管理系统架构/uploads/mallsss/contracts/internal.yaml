@@ -1,0 +1,67 @@
+# 同进程内部方法约定
+# first release，not breaking。
+#
+# 这些方法不是 HTTP。禁止在 openapi.yaml 的 paths 中暴露同名或同语义端点。
+# 调用方：F-001 发布 / 重新上架（ADR-003）。服务端合一，进程内直接调用。
+
+version: "1.0.0"
+breakingChange: false
+notHttp: true
+
+description: |
+  F-001 发布动作在将车辆置为 published 之前，必须进程内反查：
+  - F-003 countImages(vehicleId) → 图片数量，要求 ≥ 4
+  - F-004 isPriceFilled(vehicleId) → 是否已填价（面谈算已填写）
+
+  失败语义（铁律）：
+  - countImages 失败必须抛错，不得返回 0 冒充没图
+  - isPriceFilled 失败必须抛错，不得返回 false 冒充未填写
+  - F-001 捕获上述错误后返回 HTTP 500 INTERNAL_ERROR，
+    不得降级为 422 PUBLISH_PRECONDITION_FAILED
+
+methods:
+  - name: countImages
+    owner: F-003
+    caller: F-001
+    signature: countImages(vehicleId: int64) -> int
+    description: |
+      返回该车辆当前已确认落库的图片数量（不含仅预签名未 confirm 的对象）。
+      车辆不存在时抛错（不得返回 0）。
+      查询基础设施失败时抛错（不得返回 0）。
+    args:
+      - name: vehicleId
+        type: int64
+        description: F-001 车辆技术主键
+    returns:
+      type: int
+      description: 图片数量，≥ 0 的整数。0 只表示确实没有已确认图片。
+    throws:
+      - 车辆不存在
+      - 数据库等基础设施失败
+    forbidden:
+      - 失败时返回 0
+      - 把预签名未确认的上传算入数量
+      - 做成 HTTP 接口供 F-001 发布路径调用
+
+  - name: isPriceFilled
+    owner: F-004
+    caller: F-001
+    signature: isPriceFilled(vehicleId: int64) -> boolean
+    description: |
+      该车是否至少有一条价格记录。有记录即为已填写；「面谈」（negotiable）视为已填写。
+      车辆不存在时抛错（不得返回 false）。
+      查询基础设施失败时抛错（不得返回 false）。
+    args:
+      - name: vehicleId
+        type: int64
+        description: F-001 车辆技术主键
+    returns:
+      type: boolean
+      description: true 表示已填写；false 只表示该车确实尚无任何价格记录。
+    throws:
+      - 车辆不存在
+      - 数据库等基础设施失败
+    forbidden:
+      - 失败时返回 false
+      - 把「面谈」当成未填写
+      - 做成 HTTP 接口供 F-001 发布路径调用

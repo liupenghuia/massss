@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { Alert, App as AntdApp, Button, Form, Input, List, Select, Space, Tag, Typography } from "antd";
 import { api } from "../api";
 import { useSession } from "../session";
 
@@ -12,31 +11,16 @@ type Account = {
   mustChangePassword: boolean;
 };
 
-type SelfPasswordValues = {
-  currentPassword: string;
-  newPassword: string;
-};
-
-type CreateAccountValues = {
-  loginName: string;
-  role: "admin" | "super_admin";
-};
-
 export function AccountsPage() {
   const { session, setSession } = useSession();
   const navigate = useNavigate();
-  const { message } = AntdApp.useApp();
   const [error, setError] = useState("");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [oncePassword, setOncePassword] = useState("");
-  const [selfSaving, setSelfSaving] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [selfForm] = Form.useForm<SelfPasswordValues>();
-  const [createForm] = Form.useForm<CreateAccountValues>();
-
-  if (!session) {
-    return null;
-  }
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newLogin, setNewLogin] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "super_admin">("admin");
 
   async function loadAccounts() {
     setError("");
@@ -44,51 +28,38 @@ export function AccountsPage() {
       const data = await api<{ items: Account[] }>("/admin/accounts");
       setAccounts(data.items);
     } catch (err) {
-      const text = err instanceof Error ? err.message : "无法加载账号";
-      setError(text);
-      void message.error(text);
+      setError(err instanceof Error ? err.message : "无法加载账号");
     }
   }
 
-  async function changeOwnPassword(values: SelfPasswordValues) {
+  async function changeOwnPassword(e: FormEvent) {
+    e.preventDefault();
     setError("");
-    setSelfSaving(true);
     try {
       await api("/admin/auth/password", {
         method: "POST",
-        body: JSON.stringify({
-          currentPassword: values.currentPassword,
-          newPassword: values.newPassword,
-        }),
+        body: JSON.stringify({ currentPassword, newPassword }),
       });
       setSession(null);
       navigate("/login", { replace: true, state: { notice: "密码已修改，请重新登录" } });
     } catch (err) {
-      const text = err instanceof Error ? err.message : "改密失败";
-      setError(text);
-      void message.error(text);
-    } finally {
-      setSelfSaving(false);
+      setError(err instanceof Error ? err.message : "改密失败");
     }
   }
 
-  async function createAccount(values: CreateAccountValues) {
+  async function createAccount(e: FormEvent) {
+    e.preventDefault();
     setError("");
-    setCreating(true);
     try {
       const data = await api<{ account: Account; initialPassword: string }>("/admin/accounts", {
         method: "POST",
-        body: JSON.stringify({ loginName: values.loginName, role: values.role }),
+        body: JSON.stringify({ loginName: newLogin, role: newRole }),
       });
       setOncePassword(data.initialPassword);
-      createForm.resetFields();
+      setNewLogin("");
       await loadAccounts();
     } catch (err) {
-      const text = err instanceof Error ? err.message : "创建失败";
-      setError(text);
-      void message.error(text);
-    } finally {
-      setCreating(false);
+      setError(err instanceof Error ? err.message : "创建失败");
     }
   }
 
@@ -101,9 +72,7 @@ export function AccountsPage() {
       });
       await loadAccounts();
     } catch (err) {
-      const text = err instanceof Error ? err.message : "操作失败";
-      setError(text);
-      void message.error(text);
+      setError(err instanceof Error ? err.message : "操作失败");
     }
   }
 
@@ -115,124 +84,113 @@ export function AccountsPage() {
       });
       setOncePassword(data.initialPassword);
     } catch (err) {
-      const text = err instanceof Error ? err.message : "重置失败";
-      setError(text);
-      void message.error(text);
+      setError(err instanceof Error ? err.message : "重置失败");
     }
   }
 
-  return (
-    <Space direction="vertical" size="large" style={{ display: "flex" }}>
-      {error ? <Alert type="error" role="alert" title={error} showIcon /> : null}
+  useEffect(() => {
+    if (session?.role === "super_admin") void loadAccounts();
+  }, [session?.role]);
 
-      <section>
-        <Typography.Title level={4}>修改自己的密码</Typography.Title>
-        <Form<SelfPasswordValues>
-          form={selfForm}
-          layout="vertical"
-          onFinish={(values) => void changeOwnPassword(values)}
-          style={{ maxWidth: 400 }}
-        >
-          <Form.Item
-            name="currentPassword"
-            label="当前密码"
-            rules={[{ required: true, message: "请输入当前密码" }]}
-          >
-            <Input.Password autoComplete="current-password" />
-          </Form.Item>
-          <Form.Item
-            name="newPassword"
-            label="新密码"
-            rules={[{ required: true, message: "请输入新密码" }]}
-          >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={selfSaving}>
-              改密
-            </Button>
-          </Form.Item>
-        </Form>
-      </section>
+  if (!session) return null;
+
+  return (
+    <div>
+      <h2>账号管理</h2>
+      {error ? (
+        <p className="banner banner-warn" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <form onSubmit={(e) => void changeOwnPassword(e)} style={{ maxWidth: 360, margin: "20px 0" }}>
+        <h3>修改自己的密码</h3>
+        <label className="field">
+          <span>当前密码</span>
+          <input className="input" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+        </label>
+        <label className="field" style={{ marginTop: 12 }}>
+          <span>新密码</span>
+          <input className="input" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+        </label>
+        <button type="submit" className="btn btn-secondary" style={{ marginTop: 12 }}>
+          改密
+        </button>
+      </form>
 
       {session.role === "super_admin" ? (
-        <section>
-          <Typography.Title level={4}>账号管理</Typography.Title>
-          <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-            <div>
-              <Button type="default" onClick={() => void loadAccounts()}>
-                刷新列表
-              </Button>
-            </div>
-            <Form<CreateAccountValues>
-              form={createForm}
-              layout="inline"
-              initialValues={{ role: "admin" }}
-              onFinish={(values) => void createAccount(values)}
-            >
-              <Form.Item
-                name="loginName"
-                label="新登录名"
-                rules={[{ required: true, message: "请输入登录名" }]}
+        <>
+          <form onSubmit={(e) => void createAccount(e)} className="toolbar" style={{ alignItems: "flex-end", marginBottom: 20 }}>
+            <label className="field" style={{ flex: 1 }}>
+              <span>新登录名</span>
+              <input className="input" value={newLogin} onChange={(e) => setNewLogin(e.target.value)} required />
+            </label>
+            <div className="seg">
+              <button
+                type="button"
+                className="seg-opt"
+                style={newRole === "admin" ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" } : undefined}
+                onClick={() => setNewRole("admin")}
               >
-                <Input />
-              </Form.Item>
-              <Form.Item name="role" label="角色" rules={[{ required: true }]}>
-                <Select
-                  style={{ width: 160 }}
-                  options={[
-                    { value: "admin", label: "管理员" },
-                    { value: "super_admin", label: "超级管理员" },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item>
-                <Button htmlType="submit" loading={creating}>
-                  新建
-                </Button>
-              </Form.Item>
-            </Form>
-            {oncePassword ? (
-              <Alert
-                type="warning"
-                showIcon
-                title={
-                  <>
-                    一次性口令（只显示一次）：<Typography.Text code>{oncePassword}</Typography.Text>
-                  </>
+                管理员
+              </button>
+              <button
+                type="button"
+                className="seg-opt"
+                style={
+                  newRole === "super_admin" ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" } : undefined
                 }
-              />
-            ) : null}
-            <List
-              bordered
-              dataSource={accounts}
-              locale={{ emptyText: "暂无账号，请先刷新列表" }}
-              renderItem={(a) => (
-                <List.Item
-                  actions={[
-                    <Button
-                      key="toggle"
-                      type="link"
-                      onClick={() => void setEnabled(a.id, !a.enabled)}
-                    >
-                      {a.enabled ? "停用" : "启用"}
-                    </Button>,
-                    <Button key="reset" type="link" onClick={() => void resetPassword(a.id)}>
+                onClick={() => setNewRole("super_admin")}
+              >
+                超管
+              </button>
+            </div>
+            <button type="submit" className="btn btn-primary">
+              新建
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => void loadAccounts()}>
+              刷新列表
+            </button>
+          </form>
+          {oncePassword ? (
+            <div className="banner banner-warn" style={{ marginBottom: 16 }}>
+              <div>一次性口令（只显示一次）</div>
+              <code>{oncePassword}</code>
+            </div>
+          ) : null}
+          <table className="table">
+            <thead>
+              <tr>
+                <th>登录名</th>
+                <th>角色</th>
+                <th>状态</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((a) => (
+                <tr key={a.id} style={a.enabled ? undefined : { opacity: 0.55 }}>
+                  <td>{a.loginName}</td>
+                  <td>{a.role === "super_admin" ? "超级管理员" : "管理员"}</td>
+                  <td>
+                    <span className={a.enabled ? "tag tag-accent-2" : "tag tag-outline"}>{a.enabled ? "启用" : "停用"}</span>
+                  </td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    {a.id !== session.accountId ? (
+                      <button type="button" className="btn btn-ghost" onClick={() => void setEnabled(a.id, !a.enabled)}>
+                        {a.enabled ? "停用" : "启用"}
+                      </button>
+                    ) : null}
+                    <button type="button" className="btn btn-ghost" onClick={() => void resetPassword(a.id)}>
                       重置密码
-                    </Button>,
-                  ]}
-                >
-                  <Space wrap>
-                    <span>{a.loginName}</span>
-                    <Tag>{a.role === "super_admin" ? "超级管理员" : "管理员"}</Tag>
-                    <Tag color={a.enabled ? "success" : "default"}>{a.enabled ? "启用" : "停用"}</Tag>
-                  </Space>
-                </List.Item>
-              )}
-            />
-          </Space>
-        </section>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       ) : null}
-    </Space>
+    </div>
   );
 }

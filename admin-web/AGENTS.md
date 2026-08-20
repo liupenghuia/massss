@@ -5,24 +5,17 @@
 ## 技术栈
 
 - React 19 + TypeScript + Vite
-- Ant Design **6.x**（原生支持 React 19，**不需要** `@ant-design/v5-patch-for-react-19`）
-- `@ant-design/icons` **≥ 6.0.0**，必须与 antd 主版本同步
-- `@ant-design/pro-components` 3.x 按需引入 ProTable / ProForm / ProDescriptions，**不上 Ant Design Pro 脚手架、不引入 Umi**。当前尚未安装（npm latest 2.8.10 只支持 antd 5；配 antd 6 需 3.x beta，车辆列表那刀再装）
-
-## 全局配置约定
-
-- `ConfigProvider` 统一在 `src/App.tsx` 配置，**不要在页面里零散写 theme**
-- locale 从 `antd/es/locale/zh_CN` 引入（Vite 下走 esm，cjs 路径在生产构建会多一层默认导出）
-- 用 `<App>` 组件包裹应用，`message` / `notification` / `modal` **一律用 hooks 版**（`App.useApp()`），禁止用静态方法
-- 使用 antd 默认主题，只允许调 `colorPrimary` 和 `borderRadius`。**不做定制主题、不做品牌 VI、不覆写组件内部 DOM 的 CSS**
+- 视觉以仓库 `车辆管理系统架构/车辆系统统一设计-standalone.dc.html` 为准（Organic：奶油底、陶土强调色、圆角胶囊）
+- 样式只从 `shared/organic.css` + `shared/shell.css` 取 token 和组件类（`.btn` `.card` `.tag` `.input` `.seg` `.table`），**不要再铺 antd 皮肤**
+- 前台与后台同一套 token；后台桌面优先、顶栏导航，不用侧栏
 
 ## 页面骨架
 
-- 整体布局：`Layout` + 可折叠 `Sider`（inline Menu）+ `Header` + `Content`
-- 面包屑由路由自动生成（`useLocation` 映射），**不要在每个页面手写 Breadcrumb items**
-- 面包屑层级控制在 3 级以内，最多不超过 5 级
+- 顶栏：`车行 · 管理后台` + 车辆 / 回收站 / 账号胶囊 + 用户名/退出
+- 车辆列表用 **卡片网格**（不是表格）；筛选用状态分段 + 关键字
+- 录入/编辑为左右两栏：表单+图片 | 操作/前台链接/价格记录
 
-## 列表页统一用 ProTable
+## 列表页（历史约定，仅当设计稿使用表格时）
 
 - `request` 直接对接现有接口，返回 `{ data, success, total }`
 - 筛选走 `search` 配置，**不要自己在表格上方手搓一排 Input + Button**

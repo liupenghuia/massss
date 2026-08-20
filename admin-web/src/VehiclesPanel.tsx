@@ -23,13 +23,9 @@ type AdminVehicle = {
 };
 
 type PriceValue = { type: "amount"; amount: number } | { type: "negotiable"; amount: null };
-
 type ImageItem = { id: number; url: string; caption: string };
-
 type ReportItem = { id: number; url: string; contentType: string; byteSize: number };
-
 type PriceRecordItem = { id: number; from: PriceValue; to: PriceValue; createdAt: string };
-
 type UploadTask = { name: string; status: "uploading" | "done" | "failed" };
 
 const emptyForm = {
@@ -49,9 +45,29 @@ const emptyForm = {
   initialAmount: "1.00",
 };
 
+const STATUS_LABEL: Record<Status, string> = {
+  draft: "草稿",
+  published: "已上架",
+  unpublished: "已下架",
+};
+
+function statusTag(status: Status): string {
+  if (status === "published") return "tag tag-accent-2";
+  if (status === "draft") return "tag tag-neutral";
+  return "tag tag-outline";
+}
+
+function formatPrice(p: PriceValue | null | { type: string; amount: number | null }): string {
+  if (!p) return "未填";
+  if (p.type === "negotiable" || p.type === "unset" || p.amount == null) return "面议";
+  return `${(p.amount / 10000).toFixed(2)} 万`;
+}
+
 export function VehiclesPanel() {
+  const [view, setView] = useState<"list" | "form">("list");
   const [items, setItems] = useState<AdminVehicle[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [status, setStatus] = useState<Status | "">("");
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
@@ -66,21 +82,25 @@ export function VehiclesPanel() {
   const [priceType, setPriceType] = useState<"amount" | "negotiable">("amount");
   const [priceAmount, setPriceAmount] = useState("1.00");
   const [copied, setCopied] = useState("");
+  const [dragId, setDragId] = useState<number | null>(null);
 
   const publicOrigin = (import.meta.env.VITE_PUBLIC_WEB_ORIGIN as string | undefined) ?? "http://127.0.0.1:5173";
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  async function load() {
+  async function load(nextPage = page) {
     setError("");
-    const qs = new URLSearchParams({ page: "1", pageSize: "50" });
+    const qs = new URLSearchParams({ page: String(nextPage), pageSize: String(pageSize) });
     if (status) qs.set("status", status);
     if (q.trim()) qs.set("q", q.trim());
     const data = await api<{ items: AdminVehicle[]; total: number }>(`/admin/vehicles?${qs}`);
     setItems(data.items);
     setTotal(data.total);
+    setPage(nextPage);
   }
 
   useEffect(() => {
-    void load().catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
+    void load(1).catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
   }, []);
 
   async function create(e: FormEvent) {
@@ -105,12 +125,13 @@ export function VehiclesPanel() {
           : { type: "negotiable", amount: null },
     };
     try {
-      await api("/admin/vehicles", {
+      const created = await api<AdminVehicle>("/admin/vehicles", {
         method: "POST",
         headers: { "Idempotency-Key": crypto.randomUUID(), "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       setForm(emptyForm);
+      await open(created);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "创建失败");
@@ -135,10 +156,12 @@ export function VehiclesPanel() {
     setReports(reps.items);
     const records = await api<{ items: PriceRecordItem[] }>(`/admin/vehicles/${v.id}/price-records`);
     setPriceRecords(records.items);
+    setCopied("");
+    setView("form");
   }
 
-  async function saveSelected() {
-    if (!selected) return;
+  async function saveSelected(): Promise<AdminVehicle | null> {
+    if (!selected) return null;
     setError("");
     try {
       const updated = await api<AdminVehicle>(`/admin/vehicles/${selected.id}`, {
@@ -160,19 +183,27 @@ export function VehiclesPanel() {
       });
       setSelected(updated);
       await load();
+      return updated;
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
+      return null;
     }
   }
 
-  async function act(path: string) {
-    if (!selected) return;
+  async function act(path: string, vehicle: AdminVehicle = selected as AdminVehicle) {
+    if (!vehicle) return;
     setError("");
     try {
-      const updated = await api<AdminVehicle>(`/admin/vehicles/${selected.id}/${path}`, {
+      const updated = await api<AdminVehicle>(`/admin/vehicles/${vehicle.id}/${path}`, {
         method: "POST",
-        body: JSON.stringify({ version: selected.version }),
+        body: JSON.stringify({ version: vehicle.version }),
       });
+      if (path === "trash") {
+        setSelected(null);
+        setView("list");
+        await load();
+        return;
+      }
       setSelected(updated);
       await load();
     } catch (err) {
@@ -207,7 +238,7 @@ export function VehiclesPanel() {
         const contentType = file.type || "image/jpeg";
         const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
           `/admin/vehicles/${selected.id}/images/presign`,
-          { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) }
+          { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) },
         );
         await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
         await api(`/admin/vehicles/${selected.id}/images`, {
@@ -233,7 +264,7 @@ export function VehiclesPanel() {
         const contentType = file.type || "application/pdf";
         const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
           `/admin/vehicles/${selected.id}/reports/presign`,
-          { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) }
+          { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) },
         );
         await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
         await api(`/admin/vehicles/${selected.id}/reports`, {
@@ -262,266 +293,636 @@ export function VehiclesPanel() {
     }
   }
 
-  return (
-    <section>
-      <h2>车辆</h2>
-      {error ? <p role="alert">{error}</p> : null}
+  async function saveCaption(imageId: number, caption: string) {
+    if (!selected) return;
+    try {
+      await api(`/admin/vehicles/${selected.id}/images/${imageId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ caption }),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存图片说明失败");
+    }
+  }
+
+  async function dropReorder(targetId: number) {
+    if (!selected || dragId == null || dragId === targetId) {
+      setDragId(null);
+      return;
+    }
+    const ids = images.map((img) => img.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) {
+      setDragId(null);
+      return;
+    }
+    const next = [...ids];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setDragId(null);
+    try {
+      const data = await api<{ items: ImageItem[] }>(`/admin/vehicles/${selected.id}/images/order`, {
+        method: "PUT",
+        body: JSON.stringify({ imageIds: next }),
+      });
+      setImages(data.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "排序失败");
+    }
+  }
+
+  function startCreate() {
+    setSelected(null);
+    setForm(emptyForm);
+    setImages([]);
+    setReports([]);
+    setPriceRecords([]);
+    setPrice(null);
+    setError("");
+    setView("form");
+  }
+
+  if (view === "form") {
+    const editing = selected;
+    const energy = editing ? editing.energyType : form.energyType;
+    return (
       <div>
-        <select value={status} onChange={(e) => setStatus(e.target.value as Status | "")}>
-          <option value="">全部状态</option>
-          <option value="draft">草稿</option>
-          <option value="published">已上架</option>
-          <option value="unpublished">已下架</option>
-        </select>
-        <input placeholder="品牌/车型" value={q} onChange={(e) => setQ(e.target.value)} />
-        <button type="button" onClick={() => void load()}>
-          筛选
-        </button>
-        <span>共 {total} 辆</span>
-      </div>
-      <ul>
-        {items.map((v) => (
-          <li key={v.id}>
-            <button type="button" onClick={() => void open(v)}>
-              #{v.id} {v.brand} {v.model} · {v.status} · v{v.version}
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <h3>新建车辆</h3>
-      <form onSubmit={create}>
-        <label>
-          品牌
-          <input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} required />
-        </label>
-        <label>
-          车型
-          <input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} required />
-        </label>
-        <label>
-          上牌年
-          <input type="number" value={form.registrationYear} onChange={(e) => setForm({ ...form, registrationYear: Number(e.target.value) })} />
-        </label>
-        <label>
-          里程
-          <input type="number" value={form.mileageKm} onChange={(e) => setForm({ ...form, mileageKm: Number(e.target.value) })} />
-        </label>
-        <label>
-          颜色
-          <input value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} required />
-        </label>
-        <label>
-          车况
-          <input value={form.conditionDesc} onChange={(e) => setForm({ ...form, conditionDesc: e.target.value })} required />
-        </label>
-        <label>
-          能源
-          <select value={form.energyType} onChange={(e) => setForm({ ...form, energyType: e.target.value as EnergyType })}>
-            <option value="gasoline">汽油</option>
-            <option value="ev">纯电</option>
-            <option value="phev">插混</option>
-            <option value="range_extender">增程</option>
-          </select>
-        </label>
-        <label>
-          过户次数
-          <input type="number" value={form.transferCount} onChange={(e) => setForm({ ...form, transferCount: Number(e.target.value) })} />
-        </label>
-        {form.energyType !== "ev" ? (
-          <label>
-            排量
-            <input value={form.displacementL} onChange={(e) => setForm({ ...form, displacementL: e.target.value })} />
-          </label>
-        ) : null}
-        {form.energyType !== "gasoline" ? (
-          <>
-            <label>
-              电耗
-              <input value={form.energyConsumption} onChange={(e) => setForm({ ...form, energyConsumption: e.target.value })} />
-            </label>
-            <label>
-              电池 kWh
-              <input value={form.batteryKwh} onChange={(e) => setForm({ ...form, batteryKwh: e.target.value })} />
-            </label>
-          </>
-        ) : null}
-        <label>
-          VIN
-          <input value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} />
-        </label>
-        <label>
-          初始价格
-          <select value={form.initialPriceType} onChange={(e) => setForm({ ...form, initialPriceType: e.target.value as "amount" | "negotiable" })}>
-            <option value="amount">标价</option>
-            <option value="negotiable">面谈</option>
-          </select>
-        </label>
-        {form.initialPriceType === "amount" ? (
-          <label>
-            金额
-            <input value={form.initialAmount} onChange={(e) => setForm({ ...form, initialAmount: e.target.value })} />
-          </label>
-        ) : null}
-        <button type="submit">创建</button>
-      </form>
-
-      {selected ? (
-        <div>
-          <h3>
-            编辑 #{selected.id}（{selected.status} · v{selected.version}）
-          </h3>
-          <label>
-            品牌
-            <input value={selected.brand} onChange={(e) => setSelected({ ...selected, brand: e.target.value })} />
-          </label>
-          <label>
-            车型
-            <input value={selected.model} onChange={(e) => setSelected({ ...selected, model: e.target.value })} />
-          </label>
-          <label>
-            颜色
-            <input value={selected.color} onChange={(e) => setSelected({ ...selected, color: e.target.value })} />
-          </label>
-          <label>
-            车况
-            <input value={selected.conditionDesc} onChange={(e) => setSelected({ ...selected, conditionDesc: e.target.value })} />
-          </label>
-          <button type="button" onClick={() => void saveSelected()}>
-            保存字段
-          </button>
-          <button type="button" onClick={() => void act("publish")}>
-            上架
-          </button>
-          <button type="button" onClick={() => void act("unpublish")}>
-            下架
-          </button>
-          <button type="button" onClick={() => void act("trash")}>
-            进回收站
-          </button>
-          {selected.status === "published" ? (
-            <p>
-              前台链接：
-              <code>{`${publicOrigin}/vehicles/${selected.id}`}</code>
-              <button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard.writeText(`${publicOrigin}/vehicles/${selected.id}`);
-                  setCopied("已复制");
-                }}
-              >
-                复制
-              </button>
-              {copied}
-            </p>
-          ) : (
-            <p>未上架，不能复制前台链接（无访客预览）。</p>
-          )}
-          <p>
-            当前价：
-            {price?.type === "amount" ? `${(price.amount / 10000).toFixed(2)} 万` : price ? "面议" : "未填"}
+        {error ? (
+          <p className="banner banner-warn" role="alert">
+            {error}
           </p>
-          <select value={priceType} onChange={(e) => setPriceType(e.target.value as "amount" | "negotiable")}>
-            <option value="amount">标价</option>
-            <option value="negotiable">面谈</option>
-          </select>
-          {priceType === "amount" ? (
-            <input value={priceAmount} onChange={(e) => setPriceAmount(e.target.value)} />
-          ) : null}
-          <button type="button" onClick={() => void savePrice()}>
-            改价
-          </button>
-          <p>价格历史</p>
-          <ul>
-            {priceRecords.map((r) => (
-              <li key={r.id}>
-                {r.createdAt}：
-                {r.from.type === "amount" ? `${(r.from.amount / 10000).toFixed(2)} 万` : "面议"} →{" "}
-                {r.to.type === "amount" ? `${(r.to.amount / 10000).toFixed(2)} 万` : "面议"}
-              </li>
-            ))}
-          </ul>
-          <p>图片（已上架至少 4 张）</p>
-          <ul>
-            {images.map((img) => (
-              <li key={img.id}>
-                <img src={img.url} alt={img.caption} width={80} />
-              </li>
-            ))}
-          </ul>
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const files = Array.from(e.dataTransfer.files);
-              if (files.length) void uploadImages(files);
-            }}
-            style={{ border: "1px dashed #999", padding: "8px" }}
-          >
-            拖拽图片到此处上传，或
-            <input
-              type="file"
-              multiple
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                if (files.length) void uploadImages(files);
-              }}
-            />
-          </div>
-          {imageUploads.length ? (
-            <ul>
-              {imageUploads.map((t) => (
-                <li key={t.name}>
-                  {t.name}：{t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <p>评估报告</p>
-          <ul>
-            {reports.map((r) => (
-              <li key={r.id}>
-                <a href={r.url} target="_blank" rel="noreferrer">
-                  {r.contentType} · {(r.byteSize / 1024).toFixed(0)} KB
-                </a>
-                <button type="button" onClick={() => void deleteReport(r.id)}>
-                  删除
+        ) : null}
+        <div className="edit-split">
+          <form onSubmit={editing ? (e) => { e.preventDefault(); void saveSelected(); } : (e) => void create(e)}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 22 }}>
+              <h2 style={{ margin: 0 }}>{editing ? `编辑 #${editing.id}` : "新建车辆"}</h2>
+              {editing ? <span className={statusTag(editing.status)}>{STATUS_LABEL[editing.status]}</span> : null}
+              {editing ? <span className="page-sub">v{editing.version}</span> : null}
+              <button type="button" className="btn btn-ghost" onClick={() => setView("list")}>
+                返回列表
+              </button>
+            </div>
+
+            <div className="form-grid-3">
+              <label className="field">
+                <span>品牌</span>
+                <input
+                  className="input"
+                  required
+                  value={editing ? editing.brand : form.brand}
+                  onChange={(e) =>
+                    editing
+                      ? setSelected({ ...editing, brand: e.target.value })
+                      : setForm({ ...form, brand: e.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>车型</span>
+                <input
+                  className="input"
+                  required
+                  value={editing ? editing.model : form.model}
+                  onChange={(e) =>
+                    editing
+                      ? setSelected({ ...editing, model: e.target.value })
+                      : setForm({ ...form, model: e.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>上牌年</span>
+                <input
+                  className="input"
+                  type="number"
+                  value={editing ? editing.registrationYear : form.registrationYear}
+                  onChange={(e) =>
+                    editing
+                      ? setSelected({ ...editing, registrationYear: Number(e.target.value) })
+                      : setForm({ ...form, registrationYear: Number(e.target.value) })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>里程（公里）</span>
+                <input
+                  className="input"
+                  type="number"
+                  value={editing ? editing.mileageKm : form.mileageKm}
+                  onChange={(e) =>
+                    editing
+                      ? setSelected({ ...editing, mileageKm: Number(e.target.value) })
+                      : setForm({ ...form, mileageKm: Number(e.target.value) })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>颜色</span>
+                <input
+                  className="input"
+                  required
+                  value={editing ? editing.color : form.color}
+                  onChange={(e) =>
+                    editing
+                      ? setSelected({ ...editing, color: e.target.value })
+                      : setForm({ ...form, color: e.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>过户次数</span>
+                <input
+                  className="input"
+                  type="number"
+                  value={editing ? editing.transferCount : form.transferCount}
+                  onChange={(e) =>
+                    editing
+                      ? setSelected({ ...editing, transferCount: Number(e.target.value) })
+                      : setForm({ ...form, transferCount: Number(e.target.value) })
+                  }
+                />
+              </label>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <span className="page-sub">能源</span>
+              <div className="seg" style={{ marginTop: 10 }}>
+                {(
+                  [
+                    ["gasoline", "汽油"],
+                    ["ev", "纯电"],
+                    ["phev", "插混"],
+                    ["range_extender", "增程"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className="seg-opt"
+                    style={energy === value ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" } : undefined}
+                    onClick={() =>
+                      editing
+                        ? setSelected({ ...editing, energyType: value })
+                        : setForm({ ...form, energyType: value })
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="form-grid-3" style={{ marginTop: 16 }}>
+                {energy !== "ev" ? (
+                  <label className="field">
+                    <span>排量（升）</span>
+                    <input
+                      className="input"
+                      value={editing ? String(editing.displacementL ?? "") : form.displacementL}
+                      onChange={(e) =>
+                        editing
+                          ? setSelected({ ...editing, displacementL: e.target.value ? Number(e.target.value) : null })
+                          : setForm({ ...form, displacementL: e.target.value })
+                      }
+                    />
+                  </label>
+                ) : (
+                  <label className="field" style={{ opacity: 0.45 }}>
+                    <span>排量（升）</span>
+                    <input className="input" placeholder="纯电不填" disabled />
+                  </label>
+                )}
+                {energy !== "gasoline" ? (
+                  <>
+                    <label className="field">
+                      <span>电耗</span>
+                      <input
+                        className="input"
+                        value={editing ? String(editing.energyConsumption ?? "") : form.energyConsumption}
+                        onChange={(e) =>
+                          editing
+                            ? setSelected({
+                                ...editing,
+                                energyConsumption: e.target.value ? Number(e.target.value) : null,
+                              })
+                            : setForm({ ...form, energyConsumption: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>电池 kWh</span>
+                      <input
+                        className="input"
+                        value={editing ? String(editing.batteryKwh ?? "") : form.batteryKwh}
+                        onChange={(e) =>
+                          editing
+                            ? setSelected({ ...editing, batteryKwh: e.target.value ? Number(e.target.value) : null })
+                            : setForm({ ...form, batteryKwh: e.target.value })
+                        }
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label className="field" style={{ opacity: 0.45 }}>
+                      <span>电耗</span>
+                      <input className="input" placeholder="汽油车不填" disabled />
+                    </label>
+                    <label className="field" style={{ opacity: 0.45 }}>
+                      <span>电池 kWh</span>
+                      <input className="input" placeholder="汽油车不填" disabled />
+                    </label>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <label className="field" style={{ marginTop: 16 }}>
+              <span>车辆描述</span>
+              <textarea
+                className="input"
+                rows={3}
+                required
+                value={editing ? editing.conditionDesc : form.conditionDesc}
+                onChange={(e) =>
+                  editing
+                    ? setSelected({ ...editing, conditionDesc: e.target.value })
+                    : setForm({ ...form, conditionDesc: e.target.value })
+                }
+              />
+            </label>
+
+            <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
+              <label className="field" style={{ width: 240 }}>
+                <span>VIN</span>
+                <input
+                  className="input"
+                  value={editing ? (editing.vinMasked ?? "") : form.vin}
+                  onChange={(e) => {
+                    if (editing) return;
+                    setForm({ ...form, vin: e.target.value });
+                  }}
+                  readOnly={Boolean(editing)}
+                />
+              </label>
+              {!editing ? (
+                <div>
+                  <span className="page-sub">初始价格</span>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}>
+                    <div className="seg">
+                      <button
+                        type="button"
+                        className="seg-opt"
+                        style={
+                          form.initialPriceType === "amount"
+                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
+                            : undefined
+                        }
+                        onClick={() => setForm({ ...form, initialPriceType: "amount" })}
+                      >
+                        标价
+                      </button>
+                      <button
+                        type="button"
+                        className="seg-opt"
+                        style={
+                          form.initialPriceType === "negotiable"
+                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
+                            : undefined
+                        }
+                        onClick={() => setForm({ ...form, initialPriceType: "negotiable" })}
+                      >
+                        面谈
+                      </button>
+                    </div>
+                    {form.initialPriceType === "amount" ? (
+                      <input
+                        className="input"
+                        value={form.initialAmount}
+                        onChange={(e) => setForm({ ...form, initialAmount: e.target.value })}
+                        style={{ width: 130 }}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <span className="page-sub">价格</span>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}>
+                    <div className="seg">
+                      <button
+                        type="button"
+                        className="seg-opt"
+                        style={
+                          priceType === "amount"
+                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
+                            : undefined
+                        }
+                        onClick={() => setPriceType("amount")}
+                      >
+                        标价
+                      </button>
+                      <button
+                        type="button"
+                        className="seg-opt"
+                        style={
+                          priceType === "negotiable"
+                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
+                            : undefined
+                        }
+                        onClick={() => setPriceType("negotiable")}
+                      >
+                        面谈
+                      </button>
+                    </div>
+                    {priceType === "amount" ? (
+                      <input className="input" value={priceAmount} onChange={(e) => setPriceAmount(e.target.value)} style={{ width: 130 }} />
+                    ) : null}
+                    <button type="button" className="btn btn-secondary" onClick={() => void savePrice()}>
+                      改价
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {editing ? (
+              <>
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <h3 style={{ margin: 0 }}>车辆图片</h3>
+                    <span className="page-sub">拖拽排序 · 第一张为封面 · 上架至少 4 张</span>
+                  </div>
+                  <div className="thumb-grid" style={{ marginTop: 12 }}>
+                    {images.map((img, i) => (
+                      <div key={img.id}>
+                        <div
+                          className="thumb"
+                          draggable
+                          onDragStart={() => setDragId(img.id)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => void dropReorder(img.id)}
+                          style={dragId === img.id ? { outline: "2px dashed var(--color-accent)" } : undefined}
+                        >
+                          <img src={img.url} alt={img.caption || `图片 ${i + 1}`} />
+                          {i === 0 ? <span className="tag tag-accent thumb-cover">封面</span> : null}
+                        </div>
+                        <input
+                          className="input"
+                          value={img.caption}
+                          placeholder="图片说明"
+                          onChange={(e) =>
+                            setImages((prev) => prev.map((x) => (x.id === img.id ? { ...x, caption: e.target.value } : x)))
+                          }
+                          onBlur={(e) => void saveCaption(img.id, e.target.value)}
+                          style={{ marginTop: 6, fontSize: 12, padding: "6px 12px" }}
+                        />
+                      </div>
+                    ))}
+                    <div>
+                      <div
+                        className="dropzone"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const files = Array.from(e.dataTransfer.files);
+                          if (files.length) void uploadImages(files);
+                        }}
+                      >
+                        拖拽图片到此处上传
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files ?? []);
+                            if (files.length) void uploadImages(files);
+                          }}
+                          style={{ display: "block", marginTop: 8 }}
+                        />
+                      </div>
+                      {imageUploads.map((t) => (
+                        <div key={t.name} className="page-sub">
+                          {t.name} {t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 24 }}>
+                  <h3>评估报告</h3>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    {reports.map((r) => (
+                      <div key={r.id} className="banner banner-ok" style={{ display: "flex", alignItems: "center", gap: 12, borderRadius: 999 }}>
+                        <a href={r.url} target="_blank" rel="noreferrer">
+                          {r.contentType} · {(r.byteSize / 1024).toFixed(0)} KB
+                        </a>
+                        <button type="button" className="btn btn-ghost" onClick={() => void deleteReport(r.id)}>
+                          删除
+                        </button>
+                      </div>
+                    ))}
+                    <div
+                      className="dropzone"
+                      style={{ borderRadius: 999, padding: "10px 20px" }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const files = Array.from(e.dataTransfer.files);
+                        if (files.length) void uploadReports(files);
+                      }}
+                    >
+                      拖拽报告到此处上传
+                      <input
+                        type="file"
+                        multiple
+                        accept="application/pdf,image/jpeg,image/png"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files ?? []);
+                          if (files.length) void uploadReports(files);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {reportUploads.map((t) => (
+                    <div key={t.name} className="page-sub">
+                      {t.name} {t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : null}
+
+            {!editing ? (
+              <div style={{ marginTop: 24 }}>
+                <button type="submit" className="btn btn-primary">
+                  创建
                 </button>
-              </li>
-            ))}
-          </ul>
-          <div
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const files = Array.from(e.dataTransfer.files);
-              if (files.length) void uploadReports(files);
-            }}
-            style={{ border: "1px dashed #999", padding: "8px" }}
-          >
-            拖拽报告到此处上传，或
-            <input
-              type="file"
-              multiple
-              accept="application/pdf,image/jpeg,image/png"
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                if (files.length) void uploadReports(files);
-              }}
-            />
-          </div>
-          {reportUploads.length ? (
-            <ul>
-              {reportUploads.map((t) => (
-                <li key={t.name}>
-                  {t.name}：{t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
-                </li>
-              ))}
-            </ul>
+              </div>
+            ) : null}
+          </form>
+
+          {editing ? (
+            <aside>
+              <div className="card elev-sm" style={{ gap: 14 }}>
+                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  操作
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block"
+                  onClick={() =>
+                    void saveSelected().then((updated) => {
+                      if (updated) return act("publish", updated);
+                    })
+                  }
+                >
+                  保存并发布
+                </button>
+                <button type="button" className="btn btn-secondary btn-block" onClick={() => void saveSelected()}>
+                  保存草稿
+                </button>
+                <button type="button" className="btn btn-ghost btn-block" onClick={() => void act("unpublish")}>
+                  下架
+                </button>
+                <button type="button" className="btn btn-ghost btn-block" onClick={() => void act("trash")}>
+                  进回收站
+                </button>
+              </div>
+              <div className="card elev-sm" style={{ marginTop: 20, gap: 10 }}>
+                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  前台链接
+                </span>
+                {editing.status === "published" ? (
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <code>{`${publicOrigin}/vehicles/${editing.id}`}</code>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(`${publicOrigin}/vehicles/${editing.id}`);
+                        setCopied("已复制");
+                      }}
+                    >
+                      复制
+                    </button>
+                    {copied}
+                  </div>
+                ) : (
+                  <span className="page-sub">未上架时不可复制（无访客预览）</span>
+                )}
+              </div>
+              <div className="card elev-sm" style={{ marginTop: 20, gap: 12 }}>
+                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  价格记录
+                </span>
+                {priceRecords.length === 0 ? <span className="page-sub">暂无记录</span> : null}
+                {priceRecords.map((r) => (
+                  <div key={r.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                    <span>
+                      {formatPrice(r.from)} → {formatPrice(r.to)}
+                    </span>
+                    <span className="page-sub">{r.createdAt.slice(5, 10)}</span>
+                  </div>
+                ))}
+                <div className="price price-sm">当前：{formatPrice(price)}</div>
+              </div>
+            </aside>
           ) : null}
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <h2>车辆</h2>
+          <p className="page-sub">共 {total} 辆</p>
+        </div>
+        <div className="toolbar">
+          <div className="seg">
+            {(
+              [
+                ["", "全部状态"],
+                ["draft", "草稿"],
+                ["published", "已上架"],
+                ["unpublished", "已下架"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                className="seg-opt"
+                style={status === value ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" } : undefined}
+                onClick={() => {
+                  setStatus(value);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <input className="input" placeholder="品牌 / 车型" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button type="button" className="btn btn-secondary" onClick={() => void load(1)}>
+            筛选
+          </button>
+          <button type="button" className="btn btn-primary" onClick={startCreate}>
+            新建车辆
+          </button>
+        </div>
+      </div>
+      {error ? (
+        <p className="banner banner-warn" role="alert">
+          {error}
+        </p>
       ) : null}
-    </section>
+      {items.length === 0 ? (
+        <div className="empty-card">
+          <div className="empty-blob" />
+          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>暂无车辆</div>
+        </div>
+      ) : (
+        <ul className="vehicle-grid">
+          {items.map((v) => (
+            <li key={v.id}>
+              <button type="button" className="card elev-sm vehicle-card" onClick={() => void open(v)}>
+                <div className="vehicle-card-cover">车辆封面图</div>
+                <div className="vehicle-card-body">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+                    <span className="vehicle-card-title">
+                      {v.brand} {v.model}
+                    </span>
+                    <span className={statusTag(v.status)}>{STATUS_LABEL[v.status]}</span>
+                  </div>
+                  <div className="page-sub">
+                    #{v.id} · v{v.version} · {v.registrationYear} 年 · {v.mileageKm.toLocaleString("zh-CN")} 公里
+                  </div>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {totalPages > 1 ? (
+        <div className="pager">
+          <button type="button" className="btn btn-ghost" disabled={page <= 1} onClick={() => void load(page - 1)}>
+            上一页
+          </button>
+          <span>
+            {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={page >= totalPages}
+            onClick={() => void load(page + 1)}
+          >
+            下一页
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }

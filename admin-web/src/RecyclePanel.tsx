@@ -17,6 +17,19 @@ type ReportItem = { id: number; url: string; contentType: string; byteSize: numb
 type PriceValue = { type: "amount"; amount: number } | { type: "negotiable"; amount: null };
 type PriceRecordItem = { id: number; from: PriceValue; to: PriceValue; createdAt: string };
 
+const ORIGINAL: Record<string, string> = {
+  draft: "草稿",
+  published: "已上架",
+  unpublished: "已下架",
+};
+
+function daysLeft(iso: string): string | null {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (Number.isNaN(ms) || ms > 7 * 24 * 60 * 60 * 1000) return null;
+  const d = Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+  return `${d} 天后`;
+}
+
 export function RecyclePanel() {
   const [items, setItems] = useState<RecycleItem[]>([]);
   const [keyword, setKeyword] = useState("");
@@ -62,6 +75,7 @@ export function RecyclePanel() {
         method: "POST",
         body: JSON.stringify({ version: item.version }),
       });
+      setDetailId(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "恢复失败");
@@ -69,60 +83,90 @@ export function RecyclePanel() {
   }
 
   return (
-    <section>
-      <h2>回收站</h2>
-      {error ? <p role="alert">{error}</p> : null}
-      <input placeholder="品牌/车型" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
-      <button type="button" onClick={() => void load()}>
-        筛选
-      </button>
-      <ul>
-        {items.map((item) => (
-          <li key={item.id}>
-            #{item.id} {item.brand} {item.model} · 原状态 {item.originalStatus} · 到期 {item.purgeDueAt}
-            <button type="button" onClick={() => void viewDetail(item)}>
-              查看详情
-            </button>
-            <button type="button" onClick={() => void restore(item)}>
-              恢复为草稿
-            </button>
-          </li>
-        ))}
-      </ul>
+    <div>
+      <div className="page-head">
+        <div>
+          <h2>回收站</h2>
+          <p className="page-sub">删除后保留 1 个月，到期自动清除</p>
+        </div>
+        <div className="toolbar">
+          <input
+            className="input"
+            placeholder="品牌 / 车型"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
+          <button type="button" className="btn btn-secondary" onClick={() => void load()}>
+            筛选
+          </button>
+        </div>
+      </div>
+      {error ? (
+        <p className="banner banner-warn" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <table className="table">
+        <thead>
+          <tr>
+            <th>车辆</th>
+            <th>原状态</th>
+            <th>到期清除</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const soon = daysLeft(item.purgeDueAt);
+            return (
+              <tr key={item.id}>
+                <td>
+                  #{item.id} {item.brand} {item.model}
+                </td>
+                <td>
+                  <span className={item.originalStatus === "draft" ? "tag tag-neutral" : "tag tag-outline"}>
+                    {ORIGINAL[item.originalStatus] ?? item.originalStatus}
+                  </span>
+                </td>
+                <td style={soon ? { color: "var(--color-accent-700)" } : undefined}>
+                  {item.purgeDueAt.slice(0, 10)}
+                  {soon ? ` · ${soon}` : ""}
+                </td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <button type="button" className="btn btn-ghost" onClick={() => void viewDetail(item)}>
+                    查看详情
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={() => void restore(item)}>
+                    恢复为草稿
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {items.length === 0 ? <p className="page-sub">回收站是空的</p> : null}
 
       {detailId !== null ? (
-        <div>
-          <h3>车辆 #{detailId} 详情（只读）</h3>
-          <p>图片</p>
-          <ul>
+        <div className="card elev-sm" style={{ marginTop: 20, gap: 12 }}>
+          <span style={{ fontFamily: "var(--font-heading)", fontSize: 17 }}>车辆 #{detailId} 详情（只读）</span>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {detailImages.map((img) => (
-              <li key={img.id}>
-                <img src={img.url} alt={img.caption} width={80} />
-              </li>
+              <img
+                key={img.id}
+                src={img.url}
+                alt={img.caption}
+                width={76}
+                height={57}
+                style={{ width: 76, aspectRatio: "4/3", objectFit: "cover", borderRadius: "var(--radius-sm)" }}
+              />
             ))}
-          </ul>
-          <p>评估报告</p>
-          <ul>
-            {detailReports.map((r) => (
-              <li key={r.id}>
-                <a href={r.url} target="_blank" rel="noreferrer">
-                  {r.contentType} · {(r.byteSize / 1024).toFixed(0)} KB
-                </a>
-              </li>
-            ))}
-          </ul>
-          <p>价格历史</p>
-          <ul>
-            {detailPrices.map((p) => (
-              <li key={p.id}>
-                {p.createdAt}：
-                {p.from.type === "amount" ? `${(p.from.amount / 10000).toFixed(2)} 万` : "面议"} →{" "}
-                {p.to.type === "amount" ? `${(p.to.amount / 10000).toFixed(2)} 万` : "面议"}
-              </li>
-            ))}
-          </ul>
+          </div>
+          <span className="page-sub">
+            评估报告 {detailReports.length} 份 · 价格记录 {detailPrices.length} 条 · 恢复后进入草稿，可再编辑
+          </span>
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }

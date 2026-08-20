@@ -1,86 +1,71 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router";
-import { Alert, App as AntdApp, Button, Card, Form, Input } from "antd";
 import { api } from "../api";
 import { useSession } from "../session";
-
-type ChangePasswordValues = {
-  currentPassword: string;
-  newPassword: string;
-};
 
 export function ChangePasswordPage() {
   const { session, setSession } = useSession();
   const navigate = useNavigate();
-  const { message } = AntdApp.useApp();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (!session) {
-    return <Navigate to="/login" replace />;
-  }
-  if (!session.mustChangePassword) {
-    return <Navigate to="/vehicles" replace />;
-  }
+  if (!session) return <Navigate to="/login" replace />;
+  if (!session.mustChangePassword) return <Navigate to="/vehicles" replace />;
 
-  async function onFinish(values: ChangePasswordValues) {
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
     setError("");
     setLoading(true);
     try {
       await api("/admin/auth/password", {
         method: "POST",
-        body: JSON.stringify({
-          currentPassword: values.currentPassword,
-          newPassword: values.newPassword,
-        }),
+        body: JSON.stringify({ currentPassword, newPassword }),
       });
       setSession(null);
       navigate("/login", { replace: true, state: { notice: "密码已修改，请重新登录" } });
     } catch (err) {
-      const text = err instanceof Error ? err.message : "改密失败";
-      setError(text);
-      void message.error(text);
+      setError(err instanceof Error ? err.message : "改密失败");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
-    >
-      <Card title="首次登录请改密" style={{ width: 400, maxWidth: "100%" }}>
+    <div className="login-wrap">
+      <form className="password-card" onSubmit={(e) => void onSubmit(e)}>
+        <h1>首次登录请改密</h1>
+        <div className="banner banner-warn">新密码至少 8 位，含字母和数字</div>
         {error ? (
-          <Alert type="error" role="alert" title={error} showIcon style={{ marginBottom: 16 }} />
+          <div className="banner banner-warn" role="alert">
+            {error}
+          </div>
         ) : null}
-        <Form<ChangePasswordValues> layout="vertical" onFinish={(values) => void onFinish(values)}>
-          <Form.Item
-            name="currentPassword"
-            label="当前密码"
-            rules={[{ required: true, message: "请输入当前密码" }]}
-          >
-            <Input.Password autoComplete="current-password" />
-          </Form.Item>
-          <Form.Item
-            name="newPassword"
-            label="新密码（至少 8 位，含字母和数字）"
-            rules={[{ required: true, message: "请输入新密码" }]}
-          >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block>
-              保存并重新登录
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+        <label className="field">
+          <span>当前密码</span>
+          <input
+            className="input"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+          />
+        </label>
+        <label className="field">
+          <span>新密码</span>
+          <input
+            className="input"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+          />
+        </label>
+        <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
+          {loading ? "保存中…" : "保存并重新登录"}
+        </button>
+      </form>
     </div>
   );
 }

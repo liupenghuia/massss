@@ -5,9 +5,9 @@
 ## 技术栈
 
 - React 19 + TypeScript + Vite
-- **Tailwind CSS v4**，通过 `@tailwindcss/vite` 插件集成
-- CSS 入口只写 `@import "tailwindcss";`
-- **没有** `tailwind.config.js`、**没有** `postcss.config.js`、**不装** autoprefixer。v4 不需要，网上多数教程是 v3 的写法，照抄会报错
+- 视觉以仓库 `车辆管理系统架构/车辆系统统一设计-standalone.dc.html` 的 **1b 前台** 为准（Organic）
+- CSS 从 `shared/organic.css` + `shared/shell.css` 引入，与管理后台同一套 token
+- **没有** `tailwind.config.js`、**没有** `postcss.config.js`
 - 禁止引入 Ant Design 或任何中后台组件库
 
 ## 产品定位
