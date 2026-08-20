@@ -2,11 +2,11 @@
 id: F-005
 title: 回收站
 status: agreed
-version: 1.1
+version: 1.2
 owners: []
 contracts: [openapi.yaml]
-adrs: [ADR-001, ADR-003, ADR-004, ADR-009, ADR-019, ADR-023, ADR-024, ADR-025]
-rfcs: [待提: F-005 回收站接口（删除/恢复/回收站列表/已清除车辆检索）]
+adrs: [ADR-001, ADR-003, ADR-004, ADR-009, ADR-019, ADR-023, ADR-024, ADR-025, ADR-030]
+rfcs: [docs/rfc/2026-08-19-F-005-回收站接口.md（Accepted）]
 ---
 
 ## 背景
@@ -93,13 +93,27 @@ F-001 本期未预留软删除字段，本 feature 落地时需为 `vehicles` �
 - 恢复后再次发布仍需通过 ADR-003 的发布前置校验（图片 ≥4 张、已填价）。
 - 恢复为草稿后若再次发布，复用同一个公开 URL（基于车辆 id 天然稳定）。
 
+## 接口边界（ADR-030）
+
+- `trash`/`restore` 完全对称，均支持 If-Match 或 body.version 乐观锁。
+- 检查顺序（两接口一致）：车辆不存在 → 已彻底清除 → 幂等短路（不比对 version）→
+  restore 特有的"从未进回收站"分支（409 VEHICLE_NOT_IN_RECYCLE_BIN）→ 乐观锁校验。
+- `AdminRecycleBinItem` 不含 `status`（用 `originalStatus` 表达）、不含价格（价格走
+  `price-records`），含 `version` 字段供前端调用 restore。
+- `AdminVehicle` 新增非 required 的 `trashedAt`/`purged` 只读字段，供管理后台判断可编辑性。
+- 回收站列表：`trashedAt` 倒序 + `id` 二级排序；`keyword`/分页越界/无匹配均返回空结果不报错。
+- 新增错误码：`RECYCLE_BIN_ITEM_PURGED`（404）、`VEHICLE_NOT_IN_RECYCLE_BIN`（409）、
+  `VEHICLE_IN_RECYCLE_BIN`（409）。
+
 ## 前置依赖
 
-⚠️ **本 feature 实现前必须先完成：**
-1. `vehicles` 表迁移，新增 `trashedAt`（可空时间戳）与 `purged`（布尔）字段。
-2. RFC 新增回收站相关接口：删除、恢复、回收站列表（含搜索分页）、已清除车辆检索。
-   契约变更需先走 RFC 修改 `contracts/openapi.yaml`。
+⚠️ **数据库表迁移仍是唯一剩余前置依赖**：`vehicles` 表新增 `trashedAt`（可空时间戳）与
+`purged`（布尔）字段，非契约范畴，需在实现开工前完成。
+
+✅ 接口契约已完成：RFC `docs/rfc/2026-08-19-F-005-回收站接口.md`（Accepted）已落地到
+`contracts/openapi.yaml`/`contracts/errors.yaml`。
 
 ## 变更历史
 - v1.0 初版
 - v1.1 /decide 定稿 26 项裁决，新增 ADR-023/024/025，status → agreed
+- v1.2 RFC 采纳落地，契约已改，新增 ADR-030；剩余前置依赖仅表迁移

@@ -2,11 +2,11 @@
 id: F-006
 title: 后台账号管理
 status: agreed
-version: 1.1
+version: 1.2
 owners: []
 contracts: [openapi.yaml]
-adrs: [ADR-001, ADR-026, ADR-027, ADR-028]
-rfcs: [待提: F-006 账号与会话接口（登录/登出/建号/停用/启用/改密/重置密码）]
+adrs: [ADR-001, ADR-026, ADR-027, ADR-028, ADR-031]
+rfcs: [docs/rfc/2026-08-19-F-006-账号与会话接口.md（Accepted）]
 ---
 
 ## 背景
@@ -97,12 +97,28 @@ rfcs: [待提: F-006 账号与会话接口（登录/登出/建号/停用/启用/
 ### 部署
 - 管理后台与前台**不同域部署**，天然隔离会话 Cookie，无需额外分区方案。
 
+## 接口与安全边界（ADR-031）
+
+- 会话 Cookie：`HttpOnly; Secure; SameSite=Strict; Path=/admin`；管理后台前端与 API 同源部署。
+- CSRF：`SameSite=Strict` + 状态变更接口校验 `Origin` header。
+- 密码：argon2id（或 bcrypt cost≥12）存储，恒定时间比较，全站强制 HTTPS。
+- 错误码：`FORBIDDEN`（角色不足）/ `MUST_CHANGE_PASSWORD` / `INVALID_CREDENTIALS`（密码错误或
+  账号不存在统一码，防枚举）/ `ACCOUNT_DISABLED` / `ACCOUNT_LOCKED` / `ACCOUNT_LOGIN_NAME_TAKEN`
+  / `CANNOT_DISABLE_SELF` / `LAST_SUPER_ADMIN`。
+- 登录失败：DB 原子计数，固定 15 分钟锁定窗口，成功登录清零，登录接口加 IP 级限流。
+- 建号/重置密码不支持幂等重放，网络超时未收到口令时靠再次调用重置补救；网关/日志对这两个
+  接口的响应体脱敏。
+
 ## 前置依赖
 
-⚠️ **本 feature 实现前必须先完成 RFC**：新增账号与会话相关接口
-（登录、登出、建号、停用、启用、改密、重置密码、账号列表），契约变更需先走 RFC
-修改 `contracts/openapi.yaml`。
+✅ 接口契约已完成：RFC `docs/rfc/2026-08-19-F-006-账号与会话接口.md`（Accepted）已落地到
+`contracts/openapi.yaml`/`contracts/errors.yaml`。
+
+⚠️ **仍需部署侧完成**（非契约范畴，不阻塞代码实现，但阻塞上线）：
+1. 首个超级管理员种子脚本（口令通过环境变量注入）。
+2. 全站 HTTPS 强制配置（网关/反向代理层）。
 
 ## 变更历史
 - v1.0 初版
 - v1.1 /decide 定稿 16 项裁决，新增 ADR-026/027/028，status → agreed
+- v1.2 RFC 采纳落地，契约已改，新增 ADR-031；剩余依赖仅部署侧种子脚本与 HTTPS 配置

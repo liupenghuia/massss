@@ -16,3 +16,4 @@ model: sonnet
 - 只依据**已裁决**的 spec 改契约。spec 还是 draft 就停下来提醒用户。
 - breaking change 必须显式标注，并列出受影响的端。
 - 不改业务代码。
+- 只读：该 feature 的 spec、其列出的 ADR、现有 contracts/。禁止读 review/、conflicts.md、其他无关 feature 的评审。

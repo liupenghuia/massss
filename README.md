@@ -217,6 +217,11 @@ agent 才能只读它需要的那份，不会把整个项目塞进上下文。
 
 **建议门槛：跨端的、涉及状态机的、涉及钱和权限的，才走全流程。**
 
+收窄写法：`/review F-002 api,qa` 只派列出的角色，独立性（并行、互不看稿）不变。
+已定稿改动走 `/rfc`，默认只派 1～2 个受影响 reviewer。
+评审 agent 禁止通读 `contracts/openapi.yaml` 和其他 feature 的 `review/`。
+编码 agent 禁止把 `review/`、`conflicts.md` 当必读。
+
 ---
 
 ## 7. 常见问题

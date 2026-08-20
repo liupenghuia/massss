@@ -31,6 +31,17 @@ components:
         - OBJECT_NOT_UPLOADED
         - UNAUTHORIZED
         - INTERNAL_ERROR
+        - RECYCLE_BIN_ITEM_PURGED
+        - VEHICLE_NOT_IN_RECYCLE_BIN
+        - VEHICLE_IN_RECYCLE_BIN
+        - FORBIDDEN
+        - MUST_CHANGE_PASSWORD
+        - INVALID_CREDENTIALS
+        - ACCOUNT_DISABLED
+        - ACCOUNT_LOCKED
+        - ACCOUNT_LOGIN_NAME_TAKEN
+        - CANNOT_DISABLE_SELF
+        - LAST_SUPER_ADMIN
 
     ErrorResponse:
       type: object
@@ -266,7 +277,9 @@ codes:
     fixedMessage: false
     message: 未登录或登录已失效
     details: {}
-    note: 鉴权由 F-006 定稿。本期 /admin/* 假设已登录管理员；未携带有效管理员凭据时用本码。不在本期定义 403 角色分权。
+    note: |
+      鉴权已由 F-006 定稿（cookie 会话，ADR-027）。未携带有效会话时用本码；账号已被停用时
+      （会话吊销前的极短竞态窗口内）也用本码，视为会话已失效，不用 403，避免与「角色不足」混淆。
 
   - code: INTERNAL_ERROR
     httpStatus: 500
@@ -277,3 +290,101 @@ codes:
       基础设施失败（数据库、对象存储等）。
       F-001 发布时 countImages / isPriceFilled 抛错必须映射为本码，
       禁止当成「没图」或「未填价」而返回 PUBLISH_PRECONDITION_FAILED。
+
+  - code: RECYCLE_BIN_ITEM_PURGED
+    httpStatus: 404
+    fixedMessage: false
+    message: 该车辆已被彻底清除
+    details: {}
+    note: |
+      F-005。对已彻底清除（purged=true）的车辆调用 POST .../trash 或 POST .../restore。
+      trash 与 restore 对本场景返回同一 code（裁决：对称）。
+
+  - code: VEHICLE_NOT_IN_RECYCLE_BIN
+    httpStatus: 409
+    fixedMessage: false
+    message: 该车辆不在回收站中
+    details: {}
+    note: |
+      F-005。对从未进入回收站（或已恢复）的正常在管车辆调用 POST .../restore。
+      不当作幂等成功，避免掩盖前端误调用。
+
+  - code: VEHICLE_IN_RECYCLE_BIN
+    httpStatus: 409
+    fixedMessage: false
+    message: 该车辆在回收站中，无法编辑
+    details: {}
+    note: |
+      F-005。对 trashedAt 不为空（回收站中）的车辆调用在管写接口
+      （PATCH /admin/vehicles/{id}、publish/unpublish、改价、图片/报告的增删改序等）。
+      检查顺序：回收站态最先短路，其次版本冲突（VEHICLE_VERSION_CONFLICT），
+      再次状态转换合法性（ILLEGAL_STATUS_TRANSITION）。
+
+  - code: FORBIDDEN
+    httpStatus: 403
+    fixedMessage: false
+    message: 权限不足
+    details: {}
+    note: |
+      F-006。已登录但角色不足（如非 super_admin 调用超管专属接口）。
+      也用于 CSRF 防护：状态变更接口（POST/PUT/DELETE）的 Origin header 与部署域名不一致时。
+
+  - code: MUST_CHANGE_PASSWORD
+    httpStatus: 403
+    fixedMessage: false
+    message: 请先修改密码
+    details: {}
+    note: |
+      F-006。account.mustChangePassword=true 时调用除 POST /admin/auth/password、
+      POST /admin/auth/logout 外的任何 /admin/* 接口。
+
+  - code: INVALID_CREDENTIALS
+    httpStatus: 403
+    fixedMessage: false
+    message: 登录名或密码错误
+    details: {}
+    note: |
+      F-006。POST /admin/auth/login 时账号不存在或密码错误，统一返回同一 code 与同一响应体，
+      不区分，防止账号枚举。POST /admin/auth/password 当前密码错误时也用本码。
+
+  - code: ACCOUNT_DISABLED
+    httpStatus: 403
+    fixedMessage: false
+    message: 账号已停用
+    details: {}
+    note: F-006。POST /admin/auth/login 时目标账号 enabled=false，即使密码正确也拒绝登录。
+
+  - code: ACCOUNT_LOCKED
+    httpStatus: 403
+    fixedMessage: false
+    message: 账号已被锁定，请稍后再试
+    details: {}
+    note: |
+      F-006。同一账号连续 5 次登录失败（DB 原子计数，固定窗口而非滑动窗口）后，
+      15 分钟锁定期内即使密码正确也拒绝登录。成功登录后计数器清零。
+
+  - code: ACCOUNT_LOGIN_NAME_TAKEN
+    httpStatus: 409
+    fixedMessage: false
+    message: 该登录名已被占用
+    details: {}
+    note: F-006。POST /admin/accounts 时 loginName 已存在，含已停用账号（loginName 永久占用不可复用）。
+
+  - code: CANNOT_DISABLE_SELF
+    httpStatus: 403
+    fixedMessage: false
+    message: 不能对自己的账号执行此操作
+    details: {}
+    note: |
+      F-006。POST /admin/accounts/{accountId}/status 时目标账号是调用者自己，
+      无论 enabled 传 true 还是 false 均拒绝。
+
+  - code: LAST_SUPER_ADMIN
+    httpStatus: 409
+    fixedMessage: false
+    message: 系统必须至少保留一个启用状态的超级管理员
+    details: {}
+    note: |
+      F-006。POST /admin/accounts/{accountId}/status（enabled=false）或
+      POST /admin/accounts/{accountId}/role（降级为 admin）时，目标是系统里
+      最后一个启用状态的 super_admin。

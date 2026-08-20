@@ -231,6 +231,9 @@ paths:
         省略的字段保持不变；可选字段显式 null 表示清空。
         energyType 变更导致某选填字段不再适用时，服务端将该字段置 null；
         若客户端在不适用时传非 null，400 VALIDATION_ERROR。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409
+        VEHICLE_IN_RECYCLE_BIN（本响应见下方 409 Conflict）；检查顺序为先查回收站态，
+        再查版本冲突，最先短路。
       security:
         - adminAuth: []
       parameters:
@@ -276,6 +279,8 @@ paths:
         并给出 imageCount、priceFilled。
         反查抛错 → 500 INTERNAL_ERROR，禁止当成未满足前置。
         本动作合法来源只有 draft 与 unpublished（以及 published 幂等），无非法转换 409。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN，
+        检查顺序为先查回收站态，最先短路（此时不判断发布前置条件）。
       security:
         - adminAuth: []
       parameters:
@@ -294,6 +299,16 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          description: 车辆在回收站中（VEHICLE_IN_RECYCLE_BIN，F-005）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: VEHICLE_IN_RECYCLE_BIN
+                message: 该车辆在回收站中，无法编辑
+                details: {}
         "422":
           description: 不满足发布前置条件
           content:
@@ -330,6 +345,8 @@ paths:
         已 unpublished 时重复调用：200，无副作用。
         对草稿调用：409 ILLEGAL_STATUS_TRANSITION，details.from=draft，details.action=unpublish。
         下架后 /public/* 立即不可见。图片/报告/价格不做联动处理，已生成直链不失效。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN；
+        检查顺序为先查回收站态（最先短路），再查状态转换合法性。
       security:
         - adminAuth: []
       parameters:
@@ -349,19 +366,172 @@ paths:
         "404":
           $ref: "#/components/responses/VehicleNotFound"
         "409":
-          description: 非法状态转换（对草稿下架）
+          description: |
+            非法状态转换（ILLEGAL_STATUS_TRANSITION，对草稿下架），或车辆在回收站中
+            （VEHICLE_IN_RECYCLE_BIN，F-005）
           content:
             application/json:
               schema:
                 $ref: "./errors.yaml#/components/schemas/ErrorResponse"
-              example:
-                code: ILLEGAL_STATUS_TRANSITION
-                message: 非法的车辆状态转换
-                details:
-                  from: draft
-                  action: unpublish
+              examples:
+                illegalTransition:
+                  value:
+                    code: ILLEGAL_STATUS_TRANSITION
+                    message: 非法的车辆状态转换
+                    details:
+                      from: draft
+                      action: unpublish
+                inRecycleBin:
+                  value:
+                    code: VEHICLE_IN_RECYCLE_BIN
+                    message: 该车辆在回收站中，无法编辑
+                    details: {}
         "500":
           $ref: "#/components/responses/InternalError"
+
+  /admin/vehicles/{id}/trash:
+    post:
+      tags: [admin-vehicles]
+      operationId: adminTrashVehicle
+      summary: 删除到回收站
+      description: |
+        源状态 draft / unpublished / published 均可直接删除，无需先下架。
+        已上架车辆删除时，服务端额外写一条「下架」操作日志（ADR-023）。
+
+        检查顺序（先后如下，前面命中即短路，不做后面的检查）：
+        1. 车辆不存在 → 404 VEHICLE_NOT_FOUND
+        2. 已彻底清除（purged=true）→ 404 RECYCLE_BIN_ITEM_PURGED
+        3. 已在回收站（trashedAt 已有值，未清除）→ 200 幂等成功，不刷新 trashedAt，
+           不做版本比对（幂等短路优先于乐观锁校验，即使客户端带的 version 已过期也返回成功）
+        4. 以上均不命中（车辆在管）→ 校验乐观锁（If-Match 或 body.version 二选一必填，
+           不一致 409 VEHICLE_VERSION_CONFLICT），通过后执行删除
+
+        操作人、时间写入操作日志（ADR-025）。
+      security: [{ adminAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                version: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "200": { description: 已在回收站中（含幂等重复调用）, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/AdminVehicle' } } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { description: 车辆不存在（VEHICLE_NOT_FOUND），或已被彻底清除（RECYCLE_BIN_ITEM_PURGED）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/vehicles/{id}/restore:
+    post:
+      tags: [admin-vehicles]
+      operationId: adminRestoreVehicle
+      summary: 从回收站恢复
+      description: |
+        恢复一律落 draft（ADR-023），不保留删除前原状态。
+        乐观锁：与 trash 对称，If-Match 或 body.version 二选一必填。
+
+        检查顺序（先后如下，前面命中即短路）：
+        1. 车辆不存在 → 404 VEHICLE_NOT_FOUND
+        2. 已彻底清除（purged=true）→ 404 RECYCLE_BIN_ITEM_PURGED
+        3. 从未进入回收站（trashedAt 一直为空，即正常在管车辆）→
+           409 VEHICLE_NOT_IN_RECYCLE_BIN（不当幂等成功，避免掩盖前端误调用）
+        4. 已在回收站且未清除（trashedAt 有值）→ 校验乐观锁（不一致 409
+           VEHICLE_VERSION_CONFLICT），通过后恢复为 draft，trashedAt 置空
+        5. 已恢复后短时间内重复调用同一 restore（trashedAt 已被自己刚置空）→
+           200 幂等成功，不比对 version（与 trash 幂等短路对称）
+
+        恢复优先于尚未跑完的到期清除任务（ADR-024）：只要记录未被清除任务标记 purged，
+        恢复即成功；该竞态由服务端事务/行锁保证原子性，客户端无需感知中间态。
+        操作人、时间写入操作日志（ADR-025）。
+      security: [{ adminAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                version: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "200": { description: 已恢复为草稿（含幂等重复调用）, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/AdminVehicle' } } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { description: 车辆不存在（VEHICLE_NOT_FOUND），或已被彻底清除（RECYCLE_BIN_ITEM_PURGED）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "409": { description: 版本冲突（VEHICLE_VERSION_CONFLICT），或车辆本不在回收站中（VEHICLE_NOT_IN_RECYCLE_BIN）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/recycle-bin:
+    get:
+      tags: [admin-vehicles]
+      operationId: adminListRecycleBin
+      summary: 回收站列表
+      description: |
+        仅列出 trashedAt 不为空且 purged=false 的车辆。排序：trashedAt 倒序，
+        并列时按 id 倒序（二级排序键，保证同一秒内批量删除多台车时分页结果稳定，不重复不遗漏）。
+        支持关键字搜索（品牌+车型，规则与 GET /public/vehicles 的 keyword 一致：服务端 trim +
+        不区分大小写模糊匹配；trim 后为空字符串等价于未传，返回全量）与分页。
+        keyword 无匹配结果：total 0，items 空数组，不报错。
+        page 超出筛选后总数范围：返回 items 空数组，不报错（与 GET /public/vehicles 一致）。
+        每项额外返回 originalStatus（删除前状态）、trashedAt、purgeDueAt（到期日，服务端计算，
+        = trashedAt 时间戳 **严格 + 720 小时**，不做自然月/日历对齐，Asia/Shanghai 展示时区）。
+        多次「删除→恢复→再删除」循环后，purgeDueAt 基于最新一次 trashedAt 重新计算（ADR-023）。
+      security: [{ adminAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - name: keyword
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 50 }
+          description: 模糊匹配品牌+车型，规则同 GET /public/vehicles 的 keyword。
+      responses:
+        "200":
+          description: |
+            回收站列表。不返回整体 ETag header——每个 item 自带 version 字段
+            （见 AdminRecycleBinItem），前端据此调用 restore（作为 body.version 或拼 If-Match）。
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminRecycleBinList' } } }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/recycle-bin/{id}:
+    get:
+      tags: [admin-vehicles]
+      operationId: adminGetRecycleBinItem
+      summary: 回收站内车辆详情（只读）
+      description: |
+        仅 trashedAt 不为空（在站或已清除）可访问；不在回收站中（含从未删除、已恢复）→ 404
+        VEHICLE_NOT_FOUND。
+        返回车辆核心字段只读视图（不可编辑），purged 字段标明是否已彻底清除，version 字段
+        供前端调用 restore 时拼 If-Match。
+        **不含价格字段**——价格走既有 `GET /admin/vehicles/{id}/price-records`
+        （已放宽为对回收站/已清除车辆同样可访问），避免两套价格查询口径不一致。
+        图片/评估报告复用现有只读接口（GET /admin/vehicles/{id}/images、/reports），
+        本 RFC 放宽这两个接口对已删除/已清除车辆的可访问性（见下方"影响面"）。
+        **已彻底清除（purged=true）车辆**：images/reports 记录仍原样返回（服务端不做二次过滤），
+        但对应对象存储文件大概率已被异步删除，直链可能已失效，**前端需自行处理图片/文件加载失败**，
+        不代表服务端异常。
+      security: [{ adminAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        "200":
+          description: 回收站内车辆只读详情（headers 无 ETag，version 已在响应体里）
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminRecycleBinItem' } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "404": { $ref: '#/components/responses/VehicleNotFound' }
+        "500": { $ref: '#/components/responses/InternalError' }
 
   /public/vehicles:
     get:
@@ -491,6 +661,7 @@ paths:
         车辆必须已存在（含草稿）。服务端只签发上传凭证，不落图片元数据。
         客户端将文件直传到 uploadUrl，再调用 adminConfirmVehicleImage。
         图片：jpg/png/webp，对应 Content-Type image/jpeg、image/png、image/webp；单张 ≤ 10 MiB（10485760 字节）。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN。
       security:
         - adminAuth: []
       parameters:
@@ -514,6 +685,16 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          description: 车辆在回收站中（VEHICLE_IN_RECYCLE_BIN，F-005）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: VEHICLE_IN_RECYCLE_BIN
+                message: 该车辆在回收站中，无法编辑
+                details: {}
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -529,6 +710,7 @@ paths:
         同一 objectKey 重复确认：200，返回已落库的同一图片，不创建第二条。
         单车图片超过 100 张只告警不阻断（ADR-009）。
         图片无独立 status，保存后立即生效。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN。
       security:
         - adminAuth: []
       parameters:
@@ -558,6 +740,16 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          description: 车辆在回收站中（VEHICLE_IN_RECYCLE_BIN，F-005）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: VEHICLE_IN_RECYCLE_BIN
+                message: 该车辆在回收站中，无法编辑
+                details: {}
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -593,6 +785,7 @@ paths:
         imageIds 必须是该车当前全部图片 id 的一个排列：不可多、不可少、不可重复。
         事务更新。不做逐张上移，不做并发排序冲突检测（后写覆盖可接受）。
         路径中的 `order` 是字面量，实现路由时须排在 `{imageId}` 之前。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN。
       security:
         - adminAuth: []
       parameters:
@@ -620,6 +813,16 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          description: 车辆在回收站中（VEHICLE_IN_RECYCLE_BIN，F-005）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: VEHICLE_IN_RECYCLE_BIN
+                message: 该车辆在回收站中，无法编辑
+                details: {}
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -680,6 +883,8 @@ paths:
         替换 = 新增 + 删除，无原地覆盖。
         已上架车辆删除后数量将 < 4 → 409 PUBLISHED_IMAGE_MIN，不得删成 3 张。
         二次确认由管理后台 UI 负责，本接口无确认参数。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN；
+        检查顺序为先查回收站态（最先短路），再查 PUBLISHED_IMAGE_MIN。
       security:
         - adminAuth: []
       parameters:
@@ -697,15 +902,24 @@ paths:
               schema:
                 $ref: "./errors.yaml#/components/schemas/ErrorResponse"
         "409":
-          description: 已上架车辆图片不得少于 4 张
+          description: |
+            已上架车辆图片不得少于 4 张（PUBLISHED_IMAGE_MIN），或车辆在回收站中
+            （VEHICLE_IN_RECYCLE_BIN，F-005）
           content:
             application/json:
               schema:
                 $ref: "./errors.yaml#/components/schemas/ErrorResponse"
-              example:
-                code: PUBLISHED_IMAGE_MIN
-                message: 已上架车辆至少保留 4 张图片，请先下架或先补充图片
-                details: {}
+              examples:
+                publishedImageMin:
+                  value:
+                    code: PUBLISHED_IMAGE_MIN
+                    message: 已上架车辆至少保留 4 张图片，请先下架或先补充图片
+                    details: {}
+                inRecycleBin:
+                  value:
+                    code: VEHICLE_IN_RECYCLE_BIN
+                    message: 该车辆在回收站中，无法编辑
+                    details: {}
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -717,6 +931,7 @@ paths:
       description: |
         车辆必须已存在（含草稿）。报告允许 pdf/png/jpeg，
         Content-Type：application/pdf、image/png、image/jpeg；单份 ≤ 20 MiB（20971520 字节）。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN。
       security:
         - adminAuth: []
       parameters:
@@ -740,6 +955,16 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          description: 车辆在回收站中（VEHICLE_IN_RECYCLE_BIN，F-005）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: VEHICLE_IN_RECYCLE_BIN
+                message: 该车辆在回收站中，无法编辑
+                details: {}
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -752,6 +977,7 @@ paths:
         一次确认一份。一辆车可挂多份。替换 = 新增 + 删除，无原地覆盖。
         同一 objectKey 重复确认：200，返回已有报告。
         报告无 caption、无手动排序。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN。
       security:
         - adminAuth: []
       parameters:
@@ -781,6 +1007,16 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          description: 车辆在回收站中（VEHICLE_IN_RECYCLE_BIN，F-005）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: VEHICLE_IN_RECYCLE_BIN
+                message: 该车辆在回收站中，无法编辑
+                details: {}
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -812,7 +1048,9 @@ paths:
       tags: [admin-reports]
       operationId: adminDeleteVehicleReport
       summary: 删除评估报告
-      description: 物理删除。无历史版本接口。无打包下载。
+      description: |
+        物理删除。无历史版本接口。无打包下载。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN。
       security:
         - adminAuth: []
       parameters:
@@ -840,6 +1078,16 @@ paths:
                     code: REPORT_NOT_FOUND
                     message: 评估报告不存在
                     details: {}
+        "409":
+          description: 车辆在回收站中（VEHICLE_IN_RECYCLE_BIN，F-005）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: VEHICLE_IN_RECYCLE_BIN
+                message: 该车辆在回收站中，无法编辑
+                details: {}
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -901,6 +1149,7 @@ paths:
         首次设价：from.type=unset，to 为本次 PriceValue。
         面谈与数值互切算变动。
         无备注字段。无二次确认参数。无批量改价。
+        F-005：车辆在回收站中（trashedAt 不为空）时一律拒绝，返回 409 VEHICLE_IN_RECYCLE_BIN。
       security:
         - adminAuth: []
       parameters:
@@ -933,6 +1182,16 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "409":
+          description: 车辆在回收站中（VEHICLE_IN_RECYCLE_BIN，F-005）
+          content:
+            application/json:
+              schema:
+                $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+              example:
+                code: VEHICLE_IN_RECYCLE_BIN
+                message: 该车辆在回收站中，无法编辑
+                details: {}
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1062,16 +1321,277 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /admin/auth/login:
+    post:
+      operationId: adminLogin
+      summary: 登录
+      description: |
+        匿名可访问（唯一不需要 adminAuth 的 /admin/* 接口）。
+        登录名+密码，恒定时间比较。连续 5 次失败（固定窗口，DB 原子计数）锁定该账号 15 分钟，
+        锁定期内即使密码正确也拒绝，返回 403 ACCOUNT_LOCKED；成功登录后计数器清零。
+        加基础 IP 级速率限制，防止跨账号撞库枚举。
+        账号不存在或密码错误：403 INVALID_CREDENTIALS，两种情况返回完全相同的响应体，
+        不给出任何可区分账号是否存在的信息。
+        账号 disabled 时，即使密码正确也拒绝登录：403 ACCOUNT_DISABLED（与密码错误可区分，
+        因为调用方已经知道自己在用哪个 loginName 登录，不构成新的枚举面）。
+        成功后 Set-Cookie 下发会话（8 小时滑动过期，HttpOnly/Secure/SameSite=Strict，见
+        securityScheme 定义）。
+        mustChangePassword=true（首次登录或密码被重置后）时，登录仍然成功，响应体标注该字段，
+        前端必须强制跳转改密页；改密前调用除 `/admin/auth/password`、`/admin/auth/logout` 外的
+        任何 /admin/* 接口返回 403 MUST_CHANGE_PASSWORD。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [loginName, password]
+              properties:
+                loginName: { type: string, minLength: 1 }
+                password: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: 登录成功
+          headers:
+            Set-Cookie:
+              description: HttpOnly; Secure; SameSite=Strict; Path=/admin 会话 cookie
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSessionInfo' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "403":
+          description: 密码错误或账号不存在（INVALID_CREDENTIALS）/ 账号已停用（ACCOUNT_DISABLED）/ 账号被锁定（ACCOUNT_LOCKED）
+          content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/auth/logout:
+    post:
+      operationId: adminLogout
+      summary: 登出
+      description: 作废当前会话（仅当前这一个，不影响该账号其他设备的会话）。
+      security: [{ adminAuth: [] }]
+      responses:
+        "200": { description: 已登出 }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/auth/password:
+    post:
+      operationId: adminChangeOwnPassword
+      summary: 修改自己的密码
+      description: |
+        需提供当前密码。新密码最少 8 位，需同时含字母与数字。
+        成功后作废该账号全部现有会话（含当前这次请求的会话），响应体不再提示重新登录信息，
+        客户端需引导用户用新密码重新登录。mustChangePassword 置为 false。
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, minLength: 1 }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        "200": { description: 修改成功，全部会话已作废 }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { description: 当前密码错误（INVALID_CREDENTIALS）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/accounts:
+    post:
+      operationId: adminCreateAccount
+      summary: 新建管理员账号（仅超管）
+      description: |
+        仅 super_admin 可调用。填 loginName + role，系统生成随机初始口令，仅在本次响应体里
+        明文返回一次（不落库明文、不可再查看）。新账号 mustChangePassword=true。
+        loginName 全局唯一，创建后不可修改；已停用账号的 loginName 永久占用不可复用。
+
+        **不提供 Idempotency-Key**：与 F-001 建车辆不同，若网络超时导致客户端未收到这次响应，
+        账号在服务端已创建成功但客户端拿不到那个一次性口令——这种情况**接受**（ADR-026 已裁决
+        流程），恢复路径是超管再调用一次 `POST /admin/accounts/{accountId}/password-reset`
+        重新生成一个新口令，不做"重放返回同一口令"的幂等设计（会破坏"口令不落库明文、不可再查"
+        的安全承诺）。
+        **网关/日志系统要求**：本接口响应体含明文口令，网关、APM、错误监控、反向代理日志
+        **禁止记录本接口与 password-reset 接口的响应体**，仅记录状态码与耗时。
+      security: [{ adminAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [loginName, role]
+              properties:
+                loginName: { type: string, minLength: 1, maxLength: 50 }
+                role: { type: string, enum: [admin, super_admin] }
+      responses:
+        "201":
+          description: 创建成功，含一次性明文初始口令
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminAccountCreatedResponse' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { description: 非超管调用（FORBIDDEN）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "409": { description: loginName 已被占用（含已停用账号）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+    get:
+      operationId: adminListAccounts
+      summary: 账号列表（仅超管）
+      description: |
+        默认展示全部账号（含已停用），带角色与启用状态标签。仅 super_admin 可调用。
+        默认排序：id 升序（创建顺序）。
+      security: [{ adminAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        "200": { description: 账号列表, content: { application/json: { schema: { $ref: '#/components/schemas/AdminAccountList' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { description: 非超管调用（FORBIDDEN）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/accounts/{accountId}/status:
+    post:
+      operationId: adminSetAccountStatus
+      summary: 停用 / 启用账号（仅超管）
+      description: |
+        body.enabled=false 为停用，true 为启用。仅 super_admin 可调用。
+        用单一端点 + 布尔值而非 F-001 式的独立动词端点（publish/unpublish），是因为启用/停用只有
+        两态、无中间态、无前置校验，用布尔值更省；F-001 的多态转换更适合动词端点，两种风格在本
+        仓库内并存是刻意选择，不是遗漏。
+
+        检查顺序（先后如下，前面命中即短路）：
+        1. 非 super_admin 调用 → 403 FORBIDDEN
+        2. 目标账号不存在 → 404
+        3. 目标账号是调用者自己 → 403 CANNOT_DISABLE_SELF（无论 enabled 传 true 还是 false，
+           只要目标是自己就拒绝，简化规则，不必区分"停用自己"与"启用自己"这种理论上无意义的组合）
+        4. 已是目标状态（enabled 与当前一致）→ 200 幂等成功，不再往下检查
+        5. enabled=false 且目标是系统里最后一个启用状态的 super_admin → 409 LAST_SUPER_ADMIN
+        6. 以上均不命中 → 执行变更，停用时作废该账号全部现有会话（同步一致失效，见 securityScheme）
+      security: [{ adminAuth: [] }]
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200": { description: 已生效（含幂等重复调用）, content: { application/json: { schema: { $ref: '#/components/schemas/AdminAccount' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { description: 非超管调用（FORBIDDEN），或对自己调用（CANNOT_DISABLE_SELF）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "404": { description: 账号不存在, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "409": { description: 尝试停用最后一个启用超管, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/accounts/{accountId}/role:
+    post:
+      operationId: adminSetAccountRole
+      summary: 修改账号角色（仅超管，ADR-026 允许升降级）
+      description: |
+        仅 super_admin 可调用。
+
+        检查顺序（先后如下，前面命中即短路）：
+        1. 非 super_admin 调用 → 403 FORBIDDEN
+        2. 目标账号不存在 → 404
+        3. 已是目标角色 → 200 幂等成功，不再往下检查
+        4. role=admin（降级）且目标是系统里最后一个启用状态的 super_admin → 409 LAST_SUPER_ADMIN
+        5. 以上均不命中 → 执行变更（不影响会话，角色变更不强制下线，下一次鉴权即按新角色生效）
+      security: [{ adminAuth: [] }]
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { type: string, enum: [admin, super_admin] }
+      responses:
+        "200": { description: 已生效（含幂等重复调用）, content: { application/json: { schema: { $ref: '#/components/schemas/AdminAccount' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { description: 非超管调用（FORBIDDEN）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "404": { description: 账号不存在, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "409": { description: 尝试降级最后一个启用超管, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "500": { $ref: '#/components/responses/InternalError' }
+
+  /admin/accounts/{accountId}/password-reset:
+    post:
+      operationId: adminResetAccountPassword
+      summary: 重置他人密码（仅超管）
+      description: |
+        仅 super_admin 可调用。生成新随机口令，仅在本次响应体里明文返回一次。
+        重置后该账号 mustChangePassword 置为 true，且全部现有会话作废。
+        同样不提供 Idempotency-Key，网络超时未收到口令时可重复调用本接口生成新口令
+        （本接口天然可重复调用，语义上比建号更安全）。
+        网关/日志系统同样禁止记录本接口响应体（见 adminCreateAccount 的日志脱敏要求）。
+      security: [{ adminAuth: [] }]
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "200": { description: 重置成功，含一次性明文新口令, content: { application/json: { schema: { $ref: '#/components/schemas/AdminAccountCreatedResponse' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { description: 非超管调用（FORBIDDEN）, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "404": { description: 账号不存在, content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } } }
+        "500": { $ref: '#/components/responses/InternalError' }
+
 components:
   securitySchemes:
     adminAuth:
       type: apiKey
-      in: header
-      name: Authorization
+      in: cookie
+      name: admin_session
       description: |
-        鉴权由 F-006 定稿，本期假设已登录管理员。
-        本 scheme 仅为 OpenAPI 占位，不规定登录方式、token / cookie / session 形态与刷新。
-        未携带有效凭据 → 401 UNAUTHORIZED。本期单一管理员角色，不定义 403。
+        服务端会话（ADR-027），不透明会话标识，客户端不解析。8 小时滑动过期，同账号允许多端登录。
+        账号停用或改密后，该账号全部现有会话作废——吊销判定必须**同步一致读**（每次请求查会话
+        存储判定是否已被吊销），不允许"内存缓存+定期刷新"引入延迟窗口，否则违反 ADR-027 的
+        「停用立即生效」零容忍要求。
+
+        Cookie 属性（安全定稿，reviewer-security 阻塞项）：`HttpOnly; Secure; SameSite=Strict;
+        Path=/admin`。管理后台前端与本 API 同源部署（同域名，不同于 ADR-028 里"前台与后台
+        不同域"——那是前台公开站点与后台的隔离，后台前端与后台 API 视为同一部署单元），
+        因此不需要跨域 CORS credentials 配置，`SameSite=Strict` 天然覆盖大部分 CSRF 场景。
+
+        CSRF 防护（安全定稿）：除 `SameSite=Strict` 外，全部状态变更接口（POST/PUT/DELETE）
+        额外校验请求的 `Origin` header 必须等于部署域名，不一致则 403 FORBIDDEN，双重防护。
+
+        密码存储：服务端用 **argon2id**（或 bcrypt，cost factor ≥ 12）存储密码哈希，
+        **禁止**明文或 MD5/SHA256 直接摘要落库。全部 `/admin/*` 接口强制 HTTPS 传输，
+        不接受明文 HTTP。密码比对使用哈希库自带的恒定时间比较，避免时序侧信道。
+
+        未携带有效会话 → 401 UNAUTHORIZED。
+        已登录但角色不足（如管理员访问超管专属接口）→ 403 FORBIDDEN。
+        已登录但账号已被停用（会话吊销前的极短竞态窗口内）→ 401 UNAUTHORIZED（视为会话已失效，
+        不使用 403，避免与"角色不足"混淆）。
+        已登录但 mustChangePassword=true 且调用的不是改密接口本身 → 403 MUST_CHANGE_PASSWORD。
 
   headers:
     ETag:
@@ -1166,6 +1686,12 @@ components:
             code: UNAUTHORIZED
             message: 未登录或登录已失效
             details: {}
+    Forbidden:
+      description: 已登录但角色不足 / 需要先改密 / 账号已停用 / 账号被锁定，具体场景见响应体 code 字段
+      content:
+        application/json:
+          schema:
+            $ref: "./errors.yaml#/components/schemas/ErrorResponse"
     VehicleNotFound:
       description: 车辆不存在；公开端亦覆盖非 published
       content:
@@ -1241,6 +1767,17 @@ components:
           description: 系统生成的技术主键，跨 feature 关联锚点
         status:
           $ref: "#/components/schemas/VehicleStatus"
+        trashedAt:
+          type: [string, "null"]
+          format: date-time
+          description: |
+            F-005。删除进回收站的时间；null 表示不在回收站（正常在管）。
+            管理后台据此判断车辆当前是否可编辑，无需额外请求。
+        purged:
+          type: boolean
+          description: |
+            F-005。是否已被到期清除任务彻底清除。true 时该车仅剩只读展示用途（见
+            GET /admin/recycle-bin/{id}），本接口不因 purged=true 而 404。
         version:
           type: integer
           format: int64
@@ -1294,6 +1831,106 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    AdminRecycleBinItem:
+      type: object
+      additionalProperties: false
+      description: |
+        回收站内车辆的只读视图。不含 status——车辆在回收站期间 status 本身不变（ADR-023 正交建模），
+        originalStatus 已完整表达"删除前是什么状态"，重复放一个 status 字段只会引起混淆，故省略。
+        不含价格字段，价格走 GET /admin/vehicles/{id}/price-records。
+      required: [id, originalStatus, trashedAt, purgeDueAt, purged, version, brand, model,
+                 registrationYear, mileageKm, color, conditionDesc, energyType, transferCount,
+                 displacementL, energyConsumption, batteryKwh, vinMasked, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 系统生成的技术主键，跨 feature 关联锚点
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 乐观锁版本号，调用 restore 时作为 body.version 或拼 If-Match 使用
+        originalStatus:
+          type: string
+          enum: [draft, published, unpublished]
+          description: 删除前的状态（ADR-025 展示字段）
+        trashedAt:
+          type: string
+          format: date-time
+          description: 删除进站时间
+        purgeDueAt:
+          type: string
+          format: date-time
+          description: |
+            到期彻底清除时间，服务端计算 = trashedAt 严格 + 720 小时（不做日历对齐），Asia/Shanghai
+            展示时区。purged=true 时本字段仅表示历史到期时间，不代表任何未来动作，不用于倒计时展示。
+        purged:
+          type: boolean
+          description: 是否已彻底清除。已清除时本资源仅剩只读展示用途，无法恢复。
+        brand:
+          type: string
+          description: 品牌
+        model:
+          type: string
+          description: 车型
+        registrationYear:
+          type: integer
+          description: 上牌年份（公元纪年）
+        mileageKm:
+          type: integer
+          minimum: 0
+          description: 里程（千米）
+        color:
+          type: string
+          description: 颜色
+        conditionDesc:
+          type: string
+          description: 车况描述
+        energyType:
+          $ref: "#/components/schemas/EnergyType"
+        transferCount:
+          type: integer
+          minimum: 0
+          description: 过户次数（手数）
+        displacementL:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 排量（升）。不适用时为 null。
+        energyConsumption:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电耗。不适用时为 null。
+        batteryKwh:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电池度数（kWh）。不适用时为 null。
+        vinMasked:
+          type: [string, "null"]
+          description: 车架号掩码（末最多 6 位明文，其余 *），规则与 AdminVehicle 一致
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AdminRecycleBinList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminRecycleBinItem" }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+        total:
+          type: integer
+          minimum: 0
+          description: 筛选后（含 keyword）匹配总数
 
     PublicVehicle:
       type: object
@@ -2051,4 +2688,51 @@ components:
         total:
           type: integer
           minimum: 0
+
+    AdminSessionInfo:
+      type: object
+      additionalProperties: false
+      required: [accountId, loginName, role, mustChangePassword]
+      properties:
+        accountId: { type: integer, format: int64, minimum: 1 }
+        loginName: { type: string }
+        role: { type: string, enum: [admin, super_admin] }
+        mustChangePassword:
+          type: boolean
+          description: true 时前端必须强制跳转改密页面，此前调用其他接口返回 403
+
+    AdminAccount:
+      type: object
+      additionalProperties: false
+      description: 账号资源。不含密码/密码哈希。
+      required: [id, loginName, role, enabled, mustChangePassword, createdAt, updatedAt]
+      properties:
+        id: { type: integer, format: int64, minimum: 1 }
+        loginName: { type: string }
+        role: { type: string, enum: [admin, super_admin] }
+        enabled: { type: boolean }
+        mustChangePassword: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AdminAccountList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminAccount' } }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+
+    AdminAccountCreatedResponse:
+      type: object
+      additionalProperties: false
+      description: 新建账号或重置密码后的一次性响应，initialPassword 只在本次返回，不再可查。
+      required: [account, initialPassword]
+      properties:
+        account: { $ref: '#/components/schemas/AdminAccount' }
+        initialPassword:
+          type: string
+          description: 一次性明文初始口令，仅本次响应体携带，服务端不落库明文
 
