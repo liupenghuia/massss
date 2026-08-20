@@ -26,6 +26,8 @@ type PriceValue = { type: "amount"; amount: number } | { type: "negotiable"; amo
 
 type ImageItem = { id: number; url: string; caption: string };
 
+type ReportItem = { id: number; url: string; contentType: string; byteSize: number };
+
 const emptyForm = {
   brand: "",
   model: "",
@@ -53,6 +55,7 @@ export function VehiclesPanel() {
   const [selected, setSelected] = useState<AdminVehicle | null>(null);
   const [price, setPrice] = useState<PriceValue | null>(null);
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [reports, setReports] = useState<ReportItem[]>([]);
   const [priceType, setPriceType] = useState<"amount" | "negotiable">("amount");
   const [priceAmount, setPriceAmount] = useState("1.00");
   const [copied, setCopied] = useState("");
@@ -121,6 +124,8 @@ export function VehiclesPanel() {
     }
     const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${v.id}/images`);
     setImages(imgs.items);
+    const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${v.id}/reports`);
+    setReports(reps.items);
   }
 
   async function saveSelected() {
@@ -200,6 +205,39 @@ export function VehiclesPanel() {
       setImages(imgs.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "上传失败");
+    }
+  }
+
+  async function uploadReport(file: File) {
+    if (!selected) return;
+    setError("");
+    try {
+      const contentType = file.type || "application/pdf";
+      const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
+        `/admin/vehicles/${selected.id}/reports/presign`,
+        { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) }
+      );
+      await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
+      await api(`/admin/vehicles/${selected.id}/reports`, {
+        method: "POST",
+        body: JSON.stringify({ objectKey: presign.objectKey }),
+      });
+      const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${selected.id}/reports`);
+      setReports(reps.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "上传失败");
+    }
+  }
+
+  async function deleteReport(reportId: number) {
+    if (!selected) return;
+    setError("");
+    try {
+      await api(`/admin/vehicles/${selected.id}/reports/${reportId}`, { method: "DELETE" });
+      const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${selected.id}/reports`);
+      setReports(reps.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败");
     }
   }
 
@@ -386,6 +424,27 @@ export function VehiclesPanel() {
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) void uploadImage(f);
+            }}
+          />
+          <p>评估报告</p>
+          <ul>
+            {reports.map((r) => (
+              <li key={r.id}>
+                <a href={r.url} target="_blank" rel="noreferrer">
+                  {r.contentType} · {(r.byteSize / 1024).toFixed(0)} KB
+                </a>
+                <button type="button" onClick={() => void deleteReport(r.id)}>
+                  删除
+                </button>
+              </li>
+            ))}
+          </ul>
+          <input
+            type="file"
+            accept="application/pdf,image/jpeg,image/png"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void uploadReport(f);
             }}
           />
         </div>
