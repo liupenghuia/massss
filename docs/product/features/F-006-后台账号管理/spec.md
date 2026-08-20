@@ -1,7 +1,7 @@
 ---
 id: F-006
 title: 后台账号管理
-status: agreed
+status: implementing
 version: 1.2
 owners: []
 contracts: [openapi.yaml]

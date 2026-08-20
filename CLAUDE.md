@@ -28,6 +28,6 @@
 /status           全局进度总览
 
 ## 命令
-构建: <待补充>
-测试: <待补充>
+构建: cd server && npm run build（或 cd admin-web / cd public-web && npm run build）
+测试: cd server && npm test（Vitest；admin-web / public-web 暂无测试脚手架）
 检查文档一致性: python3 scripts/check-docs.py
