@@ -117,7 +117,8 @@ export async function listVehicles(client: PoolClient, params: ListVehiclesParam
     const idx = values.length;
     conditions.push(`(brand ILIKE $${idx} OR model ILIKE $${idx})`);
   }
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  conditions.push("trashed_at IS NULL");
+  const where = `WHERE ${conditions.join(" AND ")}`;
 
   const totalResult = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM vehicles ${where}`, values);
   const total = Number(totalResult.rows[0].count);
@@ -130,4 +131,148 @@ export async function listVehicles(client: PoolClient, params: ListVehiclesParam
   );
 
   return { items: itemsResult.rows, total };
+}
+
+export async function trashVehicle(client: PoolClient, id: number): Promise<VehicleRow> {
+  const result = await client.query<VehicleRow>(
+    `UPDATE vehicles SET trashed_at = now(), version = version + 1, updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id]
+  );
+  return result.rows[0];
+}
+
+export async function restoreVehicle(client: PoolClient, id: number): Promise<VehicleRow> {
+  const result = await client.query<VehicleRow>(
+    `UPDATE vehicles SET trashed_at = NULL, status = 'draft', version = version + 1, updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id]
+  );
+  return result.rows[0];
+}
+
+export async function listRecycleBin(
+  client: PoolClient,
+  params: { keyword?: string; page: number; pageSize: number }
+): Promise<{ items: VehicleRow[]; total: number }> {
+  const conditions = ["trashed_at IS NOT NULL", "purged = FALSE"];
+  const values: unknown[] = [];
+  if (params.keyword) {
+    values.push(`%${params.keyword}%`);
+    conditions.push(`(brand ILIKE $${values.length} OR model ILIKE $${values.length})`);
+  }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const totalResult = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM vehicles ${where}`, values);
+  const total = Number(totalResult.rows[0].count);
+  const itemsResult = await client.query<VehicleRow>(
+    `SELECT * FROM vehicles ${where} ORDER BY trashed_at DESC, id DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, params.pageSize, (params.page - 1) * params.pageSize]
+  );
+  return { items: itemsResult.rows, total };
+}
+
+export async function hasTrashLog(client: PoolClient, vehicleId: number): Promise<boolean> {
+  const result = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS(SELECT 1 FROM operation_logs WHERE vehicle_id = $1 AND action = 'trash') AS exists`,
+    [vehicleId]
+  );
+  return result.rows[0].exists;
+}
+
+export interface PublicListParams {
+  keyword?: string;
+  priceMin?: number;
+  priceMax?: number;
+  registrationYearMin?: number;
+  registrationYearMax?: number;
+  mileageKmMin?: number;
+  mileageKmMax?: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PublicListRow extends VehicleRow {
+  cover_image_url: string | null;
+  price_type: "amount" | "negotiable" | null;
+  price_amount: string | null;
+}
+
+export async function listPublishedVehicles(
+  client: PoolClient,
+  params: PublicListParams
+): Promise<{ items: PublicListRow[]; total: number }> {
+  const conditions = ["v.status = 'published'", "v.trashed_at IS NULL", "v.purged = FALSE"];
+  const values: unknown[] = [];
+
+  if (params.keyword) {
+    values.push(`%${params.keyword}%`);
+    conditions.push(`(v.brand ILIKE $${values.length} OR v.model ILIKE $${values.length})`);
+  }
+  if (params.registrationYearMin !== undefined) {
+    values.push(params.registrationYearMin);
+    conditions.push(`v.registration_year >= $${values.length}`);
+  }
+  if (params.registrationYearMax !== undefined) {
+    values.push(params.registrationYearMax);
+    conditions.push(`v.registration_year <= $${values.length}`);
+  }
+  if (params.mileageKmMin !== undefined) {
+    values.push(params.mileageKmMin);
+    conditions.push(`v.mileage_km >= $${values.length}`);
+  }
+  if (params.mileageKmMax !== undefined) {
+    values.push(params.mileageKmMax);
+    conditions.push(`v.mileage_km <= $${values.length}`);
+  }
+
+  const usePrice = params.priceMin !== undefined || params.priceMax !== undefined;
+  if (usePrice) {
+    conditions.push(`pr.to_type = 'amount' AND pr.to_amount IS NOT NULL`);
+    if (params.priceMin !== undefined) {
+      values.push(Math.round(params.priceMin * 100));
+      conditions.push(`ROUND(pr.to_amount * 100)::bigint >= $${values.length}`);
+    }
+    if (params.priceMax !== undefined) {
+      values.push(Math.round(params.priceMax * 100));
+      conditions.push(`ROUND(pr.to_amount * 100)::bigint <= $${values.length}`);
+    }
+  }
+
+  const from = `
+    FROM vehicles v
+    LEFT JOIN LATERAL (
+      SELECT url FROM vehicle_images WHERE vehicle_id = v.id ORDER BY sort_order ASC, id ASC LIMIT 1
+    ) img ON true
+    LEFT JOIN LATERAL (
+      SELECT to_type, to_amount FROM vehicle_price_records WHERE vehicle_id = v.id
+      ORDER BY created_at DESC, id DESC LIMIT 1
+    ) pr ON true
+  `;
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const totalResult = await client.query<{ count: string }>(`SELECT count(*)::text AS count ${from} ${where}`, values);
+  const total = Number(totalResult.rows[0].count);
+  const itemsResult = await client.query<PublicListRow>(
+    `SELECT v.*, img.url AS cover_image_url, pr.to_type AS price_type, pr.to_amount AS price_amount
+     ${from} ${where}
+     ORDER BY v.id DESC
+     LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, params.pageSize, (params.page - 1) * params.pageSize]
+  );
+  return { items: itemsResult.rows, total };
+}
+
+export async function listDueForPurge(client: PoolClient): Promise<VehicleRow[]> {
+  const result = await client.query<VehicleRow>(
+    `SELECT * FROM vehicles
+     WHERE trashed_at IS NOT NULL AND purged = FALSE
+       AND trashed_at <= now() - interval '720 hours'
+     FOR UPDATE SKIP LOCKED`
+  );
+  return result.rows;
+}
+
+export async function markPurged(client: PoolClient, id: number): Promise<void> {
+  await client.query(`UPDATE vehicles SET purged = TRUE, updated_at = now() WHERE id = $1`, [id]);
 }

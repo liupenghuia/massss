@@ -96,6 +96,14 @@ export function vehicleInRecycleBin(): AppError {
   return new AppError("VEHICLE_IN_RECYCLE_BIN", 409, "该车辆在回收站中，无法编辑");
 }
 
+export function recycleBinItemPurged(): AppError {
+  return new AppError("RECYCLE_BIN_ITEM_PURGED", 404, "该车辆已被彻底清除");
+}
+
+export function vehicleNotInRecycleBin(): AppError {
+  return new AppError("VEHICLE_NOT_IN_RECYCLE_BIN", 409, "该车辆不在回收站中");
+}
+
 export function unauthorized(): AppError {
   return new AppError("UNAUTHORIZED", 401, "未登录或登录已失效");
 }

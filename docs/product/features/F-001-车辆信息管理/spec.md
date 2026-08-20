@@ -1,7 +1,7 @@
 ---
 id: F-001
 title: 车辆信息管理
-status: agreed
+status: implementing
 version: 1.3
 owners: []
 contracts: [adminCreateVehicle, adminListVehicles, adminGetVehicle, adminPatchVehicle, adminPublishVehicle, adminUnpublishVehicle, publicListVehicles, publicGetVehicle, VEHICLE_VERSION_CONFLICT, PUBLISH_PRECONDITION_FAILED, ILLEGAL_STATUS_TRANSITION, Idempotency-Key]

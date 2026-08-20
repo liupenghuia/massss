@@ -1,7 +1,7 @@
 ---
 id: F-005
 title: 回收站
-status: agreed
+status: implementing
 version: 1.2
 owners: []
 contracts: [openapi.yaml]

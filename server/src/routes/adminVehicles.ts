@@ -14,6 +14,7 @@ import {
   validationError,
   versionConflict,
   illegalStatusTransition,
+  vehicleInRecycleBin,
 } from "../lib/errors";
 import { getVehicleById, getVehicleForUpdate, insertVehicle, listVehicles, updateVehicleFields, updateVehicleStatus } from "../db/vehicleRepo";
 import { findIdempotencyKey, hashRequestBody, saveIdempotencyKey } from "../db/idempotencyRepo";
@@ -174,6 +175,10 @@ adminVehiclesRouter.patch("/admin/vehicles/:id", async (req: Request, res: Respo
       await client.query("ROLLBACK");
       throw notFound();
     }
+    if (row.trashed_at !== null) {
+      await client.query("ROLLBACK");
+      throw vehicleInRecycleBin();
+    }
     if (Number(row.version) !== requestedVersion) {
       await client.query("ROLLBACK");
       throw versionConflict();
@@ -213,6 +218,10 @@ adminVehiclesRouter.post("/admin/vehicles/:id/publish", async (req: Request, res
     if (!row) {
       await client.query("ROLLBACK");
       throw notFound();
+    }
+    if (row.trashed_at !== null) {
+      await client.query("ROLLBACK");
+      throw vehicleInRecycleBin();
     }
 
     const plan = planPublish(row.status);
@@ -268,6 +277,10 @@ adminVehiclesRouter.post("/admin/vehicles/:id/unpublish", async (req: Request, r
     if (!row) {
       await client.query("ROLLBACK");
       throw notFound();
+    }
+    if (row.trashed_at !== null) {
+      await client.query("ROLLBACK");
+      throw vehicleInRecycleBin();
     }
 
     const plan = planUnpublish(row.status);

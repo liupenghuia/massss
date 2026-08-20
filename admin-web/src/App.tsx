@@ -1,4 +1,7 @@
 import { useState, type FormEvent } from "react";
+import { api } from "./api";
+import { VehiclesPanel } from "./VehiclesPanel";
+import { RecyclePanel } from "./RecyclePanel";
 
 type Session = {
   accountId: number;
@@ -15,26 +18,6 @@ type Account = {
   mustChangePassword: boolean;
 };
 
-type ApiError = { code: string; message: string };
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    ...init,
-  });
-  if (res.status === 204 || res.status === 200 && res.headers.get("content-length") === "0") {
-    return undefined as T;
-  }
-  const text = await res.text();
-  const body = text ? JSON.parse(text) : {};
-  if (!res.ok) {
-    const err = body as ApiError;
-    throw new Error(err.message || err.code || res.statusText);
-  }
-  return body as T;
-}
-
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loginName, setLoginName] = useState("");
@@ -46,6 +29,7 @@ export default function App() {
   const [newLogin, setNewLogin] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "super_admin">("admin");
   const [oncePassword, setOncePassword] = useState("");
+  const [tab, setTab] = useState<"vehicles" | "recycle" | "accounts">("vehicles");
 
   async function login(e: FormEvent) {
     e.preventDefault();
@@ -196,60 +180,78 @@ export default function App() {
       </header>
       {error ? <p role="alert">{error}</p> : null}
 
-      <section>
-        <h2>修改自己的密码</h2>
-        <form onSubmit={changePassword}>
-          <label>
-            当前密码
-            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
-          </label>
-          <label>
-            新密码
-            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-          </label>
-          <button type="submit">改密</button>
-        </form>
-      </section>
+      <nav>
+        <button type="button" onClick={() => setTab("vehicles")}>
+          车辆
+        </button>
+        <button type="button" onClick={() => setTab("recycle")}>
+          回收站
+        </button>
+        <button type="button" onClick={() => setTab("accounts")}>
+          账号
+        </button>
+      </nav>
 
-      {session.role === "super_admin" ? (
-        <section>
-          <h2>账号管理</h2>
-          <button type="button" onClick={() => void loadAccounts()}>
-            刷新列表
-          </button>
-          <form onSubmit={createAccount}>
-            <label>
-              新登录名
-              <input value={newLogin} onChange={(e) => setNewLogin(e.target.value)} />
-            </label>
-            <label>
-              角色
-              <select value={newRole} onChange={(e) => setNewRole(e.target.value as "admin" | "super_admin")}>
-                <option value="admin">管理员</option>
-                <option value="super_admin">超级管理员</option>
-              </select>
-            </label>
-            <button type="submit">新建</button>
-          </form>
-          {oncePassword ? (
-            <p>
-              一次性口令（只显示一次）：<code>{oncePassword}</code>
-            </p>
+      {tab === "vehicles" ? <VehiclesPanel /> : null}
+      {tab === "recycle" ? <RecyclePanel /> : null}
+
+      {tab === "accounts" ? (
+        <>
+          <section>
+            <h2>修改自己的密码</h2>
+            <form onSubmit={changePassword}>
+              <label>
+                当前密码
+                <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+              </label>
+              <label>
+                新密码
+                <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              </label>
+              <button type="submit">改密</button>
+            </form>
+          </section>
+          {session.role === "super_admin" ? (
+            <section>
+              <h2>账号管理</h2>
+              <button type="button" onClick={() => void loadAccounts()}>
+                刷新列表
+              </button>
+              <form onSubmit={createAccount}>
+                <label>
+                  新登录名
+                  <input value={newLogin} onChange={(e) => setNewLogin(e.target.value)} />
+                </label>
+                <label>
+                  角色
+                  <select value={newRole} onChange={(e) => setNewRole(e.target.value as "admin" | "super_admin")}>
+                    <option value="admin">管理员</option>
+                    <option value="super_admin">超级管理员</option>
+                  </select>
+                </label>
+                <button type="submit">新建</button>
+              </form>
+              {oncePassword ? (
+                <p>
+                  一次性口令（只显示一次）：<code>{oncePassword}</code>
+                </p>
+              ) : null}
+              <ul>
+                {accounts.map((a) => (
+                  <li key={a.id}>
+                    {a.loginName} · {a.role} · {a.enabled ? "启用" : "停用"}
+                    <button type="button" onClick={() => void setEnabled(a.id, !a.enabled)}>
+                      {a.enabled ? "停用" : "启用"}
+                    </button>
+                    <button type="button" onClick={() => void resetPassword(a.id)}>
+                      重置密码
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
-          <ul>
-            {accounts.map((a) => (
-              <li key={a.id}>
-                {a.loginName} · {a.role} · {a.enabled ? "启用" : "停用"}
-                <button type="button" onClick={() => void setEnabled(a.id, !a.enabled)}>
-                  {a.enabled ? "停用" : "启用"}
-                </button>
-                <button type="button" onClick={() => void resetPassword(a.id)}>
-                  重置密码
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+        </>
       ) : null}
     </main>
   );

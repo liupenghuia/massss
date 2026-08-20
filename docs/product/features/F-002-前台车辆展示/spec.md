@@ -1,7 +1,7 @@
 ---
 id: F-002
 title: 前台车辆展示
-status: agreed
+status: implementing
 version: 1.3
 owners: []
 contracts: [openapi.yaml]

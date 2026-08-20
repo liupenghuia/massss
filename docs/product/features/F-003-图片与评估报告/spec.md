@@ -1,7 +1,7 @@
 ---
 id: F-003
 title: 图片与评估报告
-status: agreed
+status: implementing
 version: 1.1
 owners: []
 contracts: [adminPresignVehicleImage, adminConfirmVehicleImage, adminPatchVehicleImageCaption, adminReorderVehicleImages, adminDeleteVehicleImage, adminListVehicleImages, adminPresignVehicleReport, adminConfirmVehicleReport, adminDeleteVehicleReport, adminListVehicleReports, publicListVehicleImages, publicListVehicleReports, PUBLISHED_IMAGE_MIN, countImages]

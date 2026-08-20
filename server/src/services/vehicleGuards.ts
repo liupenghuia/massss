@@ -24,6 +24,6 @@ export async function requireVehicleForWrite(client: PoolClient, id: number, for
 /** 公开端：车不可见（不存在或非 published）一律 404 VEHICLE_NOT_FOUND，不泄露真实状态。 */
 export async function requirePublishedVehicle(client: PoolClient, id: number): Promise<VehicleRow> {
   const row = await getVehicleById(client, id);
-  if (!row || row.status !== "published") throw notFound();
+  if (!row || row.status !== "published" || row.trashed_at !== null || row.purged) throw notFound();
   return row;
 }

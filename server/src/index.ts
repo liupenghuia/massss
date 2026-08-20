@@ -8,10 +8,13 @@ import { adminImagesRouter } from "./routes/adminImages";
 import { adminReportsRouter } from "./routes/adminReports";
 import { adminPricesRouter } from "./routes/adminPrices";
 import { publicMediaRouter } from "./routes/publicMedia";
+import { publicVehiclesRouter } from "./routes/publicVehicles";
+import { adminRecycleRouter } from "./routes/adminRecycle";
 import { errorHandler } from "./middleware/errorHandler";
 import { adminAuth } from "./middleware/adminAuth";
 import { csrfOrigin } from "./middleware/csrfOrigin";
 import { seedSuperAdminIfNeeded } from "./seed/superAdmin";
+import { startPurgeScheduler } from "./services/purgeRecycleBin";
 
 const app = express();
 app.use(express.json());
@@ -25,6 +28,8 @@ app.use(adminVehiclesRouter);
 app.use(adminImagesRouter);
 app.use(adminReportsRouter);
 app.use(adminPricesRouter);
+app.use(adminRecycleRouter);
+app.use(publicVehiclesRouter);
 app.use(publicMediaRouter);
 
 app.use(errorHandler);
@@ -33,6 +38,7 @@ const port = Number(process.env.PORT) || 8080;
 
 seedSuperAdminIfNeeded()
   .then(() => {
+    startPurgeScheduler();
     app.listen(port, () => {
       console.log(`server listening on :${port}`);
     });

@@ -1,7 +1,7 @@
 ---
 id: F-004
 title: 价格记录
-status: agreed
+status: implementing
 version: 1.1
 owners: []
 contracts: [adminPutVehiclePrice, adminGetVehiclePrice, adminListVehiclePriceRecords, publicGetVehiclePrice, publicListVehiclePriceRecords, isPriceFilled, PriceValue]
