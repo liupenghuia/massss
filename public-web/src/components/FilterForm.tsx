@@ -34,8 +34,8 @@ export function FilterForm({ filters, onChange, onSubmit, onReset }: Props) {
 
   return (
     <form onSubmit={onSubmit}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <label className="field" style={{ flex: 1, margin: 0 }}>
+      <div className="search-row">
+        <label className="field">
           <span className="visually-hidden">品牌 / 车型</span>
           <input
             id="keyword"

@@ -1,3 +1,2 @@
-// 本机未安装 `ali-oss`（无真实阿里云账号），仅在运行时按需动态 import。
-// 这里声明为 any 模块，只为让 tsc 通过类型检查，不代表已引入该依赖。
+// 运行时按需动态 import。此处仅声明模块存在，具体客户端形状在 objectStorage.ts 里收窄。
 declare module "ali-oss";

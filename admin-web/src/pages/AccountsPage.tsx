@@ -120,7 +120,7 @@ export function AccountsPage() {
 
       {session.role === "super_admin" ? (
         <>
-          <form onSubmit={(e) => void createAccount(e)} className="toolbar" style={{ alignItems: "flex-end", marginBottom: 20 }}>
+          <form onSubmit={(e) => void createAccount(e)} className="toolbar toolbar-end" style={{ marginBottom: 20 }}>
             <label className="field" style={{ flex: 1 }}>
               <span>新登录名</span>
               <input className="input" value={newLogin} onChange={(e) => setNewLogin(e.target.value)} required />
@@ -155,9 +155,10 @@ export function AccountsPage() {
           {oncePassword ? (
             <div className="banner banner-warn" style={{ marginBottom: 16 }}>
               <div>一次性口令（只显示一次）</div>
-              <code>{oncePassword}</code>
+              <code className="code-break">{oncePassword}</code>
             </div>
           ) : null}
+          <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
@@ -189,6 +190,7 @@ export function AccountsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </>
       ) : null}
     </div>

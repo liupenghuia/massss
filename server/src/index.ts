@@ -15,6 +15,7 @@ import { adminAuth } from "./middleware/adminAuth";
 import { csrfOrigin } from "./middleware/csrfOrigin";
 import { seedSuperAdminIfNeeded } from "./seed/superAdmin";
 import { startPurgeScheduler } from "./services/purgeRecycleBin";
+import { getObjectStorage } from "./lib/objectStorage";
 
 const app = express();
 app.use(express.json());
@@ -39,6 +40,7 @@ const port = Number(process.env.PORT) || 8080;
 seedSuperAdminIfNeeded()
   .then(() => {
     startPurgeScheduler();
+    getObjectStorage();
     app.listen(port, () => {
       console.log(`server listening on :${port}`);
     });

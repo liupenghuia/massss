@@ -106,6 +106,7 @@ export function RecyclePanel() {
           {error}
         </p>
       ) : null}
+      <div className="table-wrap">
       <table className="table">
         <thead>
           <tr>
@@ -145,6 +146,7 @@ export function RecyclePanel() {
           })}
         </tbody>
       </table>
+      </div>
       {items.length === 0 ? <p className="page-sub">回收站是空的</p> : null}
 
       {detailId !== null ? (

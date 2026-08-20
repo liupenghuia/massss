@@ -83,7 +83,7 @@ class AliyunOssAdapter implements ObjectStorageAdapter {
     }
   ) {
     this.bucket = config.bucket;
-    this.region = config.region;
+    this.region = config.region.startsWith("oss-") || config.region === "" ? config.region : `oss-${config.region}`;
   }
 
   private async getClient(): Promise<OssClientLike> {
@@ -92,10 +92,11 @@ class AliyunOssAdapter implements ObjectStorageAdapter {
     const mod = (await import("ali-oss")) as unknown as { default: new (opts: Record<string, unknown>) => OssClientLike };
     const OSS = mod.default;
     this.client = new OSS({
-      region: this.config.region,
-      bucket: this.config.bucket,
+      region: this.region,
+      bucket: this.bucket,
       accessKeyId: this.config.accessKeyId,
       accessKeySecret: this.config.accessKeySecret,
+      secure: true,
     });
     return this.client;
   }
@@ -155,6 +156,7 @@ export function getObjectStorage(): ObjectStorageAdapter {
   } else {
     instance = new MockObjectStorageAdapter(process.env.MOCK_OSS_BASE_URL ?? "http://localhost:8080");
   }
+  console.log(`object storage driver: ${useOss ? "oss" : "mock"}`);
   return instance;
 }
 

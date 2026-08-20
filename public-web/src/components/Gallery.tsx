@@ -57,7 +57,7 @@ export function Gallery({ images, title }: { images: ImageItem[]; title: string 
       </button>
 
       {images.length > 0 ? (
-        <div style={{ padding: "18px 0 0" }}>
+        <div className="gallery-thumbs">
           <div style={{ fontFamily: "var(--font-heading)", fontSize: 18 }}>车辆图片</div>
           <div className="photo-grid" style={{ marginTop: 10 }}>
             {images.slice(0, 6).map((img, i) => (

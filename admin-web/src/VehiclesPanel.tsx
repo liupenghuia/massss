@@ -63,6 +63,15 @@ function formatPrice(p: PriceValue | null | { type: string; amount: number | nul
   return `${(p.amount / 10000).toFixed(2)} 万`;
 }
 
+function ThumbPreview({ src, alt }: { src: string; alt: string }) {
+  const [ok, setOk] = useState(true);
+  useEffect(() => {
+    setOk(true);
+  }, [src]);
+  if (!ok) return <span className="thumb-fallback">无法预览</span>;
+  return <img src={src} alt={alt} onError={() => setOk(false)} />;
+}
+
 export function VehiclesPanel() {
   const [view, setView] = useState<"list" | "form">("list");
   const [items, setItems] = useState<AdminVehicle[]>([]);
@@ -240,7 +249,12 @@ export function VehiclesPanel() {
           `/admin/vehicles/${selected.id}/images/presign`,
           { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) },
         );
-        await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
+        const putRes = await fetch(presign.uploadUrl, {
+          method: "PUT",
+          headers: presign.requiredHeaders,
+          body: file,
+        });
+        if (!putRes.ok) throw new Error(`图片直传失败（${putRes.status}）`);
         await api(`/admin/vehicles/${selected.id}/images`, {
           method: "POST",
           body: JSON.stringify({ objectKey: presign.objectKey, caption: "" }),
@@ -266,7 +280,12 @@ export function VehiclesPanel() {
           `/admin/vehicles/${selected.id}/reports/presign`,
           { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) },
         );
-        await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
+        const putRes = await fetch(presign.uploadUrl, {
+          method: "PUT",
+          headers: presign.requiredHeaders,
+          body: file,
+        });
+        if (!putRes.ok) throw new Error(`报告直传失败（${putRes.status}）`);
         await api(`/admin/vehicles/${selected.id}/reports`, {
           method: "POST",
           body: JSON.stringify({ objectKey: presign.objectKey }),
@@ -355,7 +374,7 @@ export function VehiclesPanel() {
         ) : null}
         <div className="edit-split">
           <form onSubmit={editing ? (e) => { e.preventDefault(); void saveSelected(); } : (e) => void create(e)}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 22 }}>
+            <div className="form-head">
               <h2 style={{ margin: 0 }}>{editing ? `编辑 #${editing.id}` : "新建车辆"}</h2>
               {editing ? <span className={statusTag(editing.status)}>{STATUS_LABEL[editing.status]}</span> : null}
               {editing ? <span className="page-sub">v{editing.version}</span> : null}
@@ -552,7 +571,7 @@ export function VehiclesPanel() {
             </label>
 
             <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
-              <label className="field" style={{ width: 240 }}>
+              <label className="field field-fixed">
                 <span>VIN</span>
                 <input
                   className="input"
@@ -648,7 +667,7 @@ export function VehiclesPanel() {
             {editing ? (
               <>
                 <div style={{ marginTop: 24 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div className="form-head" style={{ marginBottom: 0 }}>
                     <h3 style={{ margin: 0 }}>车辆图片</h3>
                     <span className="page-sub">拖拽排序 · 第一张为封面 · 上架至少 4 张</span>
                   </div>
@@ -663,8 +682,8 @@ export function VehiclesPanel() {
                           onDrop={() => void dropReorder(img.id)}
                           style={dragId === img.id ? { outline: "2px dashed var(--color-accent)" } : undefined}
                         >
-                          <img src={img.url} alt={img.caption || `图片 ${i + 1}`} />
-                          {i === 0 ? <span className="tag tag-accent thumb-cover">封面</span> : null}
+                          <ThumbPreview src={img.url} alt={img.caption || `图片 ${i + 1}`} />
+                          {i === 0 ? <span className="tag thumb-cover">封面</span> : null}
                         </div>
                         <input
                           className="input"
@@ -674,13 +693,14 @@ export function VehiclesPanel() {
                             setImages((prev) => prev.map((x) => (x.id === img.id ? { ...x, caption: e.target.value } : x)))
                           }
                           onBlur={(e) => void saveCaption(img.id, e.target.value)}
-                          style={{ marginTop: 6, fontSize: 12, padding: "6px 12px" }}
+                          style={{ marginTop: 6, padding: "6px 12px" }}
                         />
                       </div>
                     ))}
                     <div>
-                      <div
+                      <label
                         className="dropzone"
+                        htmlFor="vehicle-image-files"
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => {
                           e.preventDefault();
@@ -690,16 +710,18 @@ export function VehiclesPanel() {
                       >
                         拖拽图片到此处上传
                         <input
+                          id="vehicle-image-files"
+                          className="visually-hidden"
                           type="file"
                           multiple
                           accept="image/jpeg,image/png,image/webp"
                           onChange={(e) => {
                             const files = Array.from(e.target.files ?? []);
                             if (files.length) void uploadImages(files);
+                            e.target.value = "";
                           }}
-                          style={{ display: "block", marginTop: 8 }}
                         />
-                      </div>
+                      </label>
                       {imageUploads.map((t) => (
                         <div key={t.name} className="page-sub">
                           {t.name} {t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
@@ -722,9 +744,9 @@ export function VehiclesPanel() {
                         </button>
                       </div>
                     ))}
-                    <div
-                      className="dropzone"
-                      style={{ borderRadius: 999, padding: "10px 20px" }}
+                    <label
+                      className="dropzone dropzone-pill"
+                      htmlFor="vehicle-report-files"
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
@@ -734,15 +756,18 @@ export function VehiclesPanel() {
                     >
                       拖拽报告到此处上传
                       <input
+                        id="vehicle-report-files"
+                        className="visually-hidden"
                         type="file"
                         multiple
                         accept="application/pdf,image/jpeg,image/png"
                         onChange={(e) => {
                           const files = Array.from(e.target.files ?? []);
                           if (files.length) void uploadReports(files);
+                          e.target.value = "";
                         }}
                       />
-                    </div>
+                    </label>
                   </div>
                   {reportUploads.map((t) => (
                     <div key={t.name} className="page-sub">
@@ -794,7 +819,7 @@ export function VehiclesPanel() {
                   前台链接
                 </span>
                 {editing.status === "published" ? (
-                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <div className="link-chip">
                     <code>{`${publicOrigin}/vehicles/${editing.id}`}</code>
                     <button
                       type="button"
@@ -806,7 +831,7 @@ export function VehiclesPanel() {
                     >
                       复制
                     </button>
-                    {copied}
+                    {copied ? <span className="page-sub">{copied}</span> : null}
                   </div>
                 ) : (
                   <span className="page-sub">未上架时不可复制（无访客预览）</span>
@@ -890,7 +915,7 @@ export function VehiclesPanel() {
               <button type="button" className="card elev-sm vehicle-card" onClick={() => void open(v)}>
                 <div className="vehicle-card-cover">车辆封面图</div>
                 <div className="vehicle-card-body">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+                  <div className="card-title-row">
                     <span className="vehicle-card-title">
                       {v.brand} {v.model}
                     </span>
