@@ -2,10 +2,10 @@
 id: F-001
 title: 车辆信息管理
 status: implementing
-version: 1.3
+version: 1.4
 owners: []
 contracts: [adminCreateVehicle, adminListVehicles, adminGetVehicle, adminPatchVehicle, adminPublishVehicle, adminUnpublishVehicle, publicListVehicles, publicGetVehicle, VEHICLE_VERSION_CONFLICT, PUBLISH_PRECONDITION_FAILED, ILLEGAL_STATUS_TRANSITION, Idempotency-Key]
-adrs: [ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-007]
+adrs: [ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-007, ADR-010, ADR-023]
 rfcs: []
 ---
 
@@ -62,8 +62,8 @@ rfcs: []
 - 车辆规模"100 台以内"是当前值非长期上限，技术方案需按可增长设计（ADR-007）
 - 管理后台权限：只有一种管理员角色，无只读/审核账号，不设审批流程（已在 docs/product/overview.md
   角色部分确认，对应 /conflicts 问题 9）
-- 遗留待办（不阻塞本 feature，留给对应 feature 处理）：车辆下架时 F-003 图片是否需联动处理
-  （问题 24，留给 F-003 评审）；F-005 删除操作允许作用于哪些状态的车辆（问题 25，留给 F-005 评审）
+- 车辆下架时 F-003 图片/报告不联动处理（ADR-010）
+- F-005 删除：草稿 / 已上架 / 已下架均可直接进回收站（ADR-023）
 
 ## 变更历史
 - v1.0 初版
@@ -71,3 +71,4 @@ rfcs: []
 - v1.2 补充发布前置校验规则（ADR-003）
 - v1.3 补充状态机、服务端健壮性规则、管理后台运营范围、价格字段归属与规模假设，
   status 改为 agreed（ADR-004、ADR-005、ADR-006、ADR-007）
+- v1.4 关闭未决 #24/#25：分别回写 ADR-010、ADR-023（已在 F-003/F-005 定稿，本文件漏标）

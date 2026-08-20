@@ -24,7 +24,8 @@ import { generateInitialPassword, hashPassword } from "../lib/password";
 import { requireSuperAdmin } from "../middleware/adminAuth";
 
 export const adminAccountsRouter = Router();
-adminAccountsRouter.use(requireSuperAdmin);
+// 必须带路径：本 router 挂在应用根上，use() 无路径会拦截所有请求（含 /public/*）。
+adminAccountsRouter.use("/admin/accounts", requireSuperAdmin);
 
 function parseAccountId(raw: string): number {
   const id = Number(raw);

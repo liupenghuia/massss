@@ -55,6 +55,9 @@ export function VehiclesPanel() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [priceType, setPriceType] = useState<"amount" | "negotiable">("amount");
   const [priceAmount, setPriceAmount] = useState("1.00");
+  const [copied, setCopied] = useState("");
+
+  const publicOrigin = (import.meta.env.VITE_PUBLIC_WEB_ORIGIN as string | undefined) ?? "http://127.0.0.1:5173";
 
   async function load() {
     setError("");
@@ -337,9 +340,27 @@ export function VehiclesPanel() {
           <button type="button" onClick={() => void act("trash")}>
             进回收站
           </button>
+          {selected.status === "published" ? (
+            <p>
+              前台链接：
+              <code>{`${publicOrigin}/vehicles/${selected.id}`}</code>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(`${publicOrigin}/vehicles/${selected.id}`);
+                  setCopied("已复制");
+                }}
+              >
+                复制
+              </button>
+              {copied}
+            </p>
+          ) : (
+            <p>未上架，不能复制前台链接（无访客预览）。</p>
+          )}
           <p>
             当前价：
-            {price?.type === "amount" ? `${price.amount} 元` : price ? "面谈" : "未填"}
+            {price?.type === "amount" ? `${(price.amount / 10000).toFixed(2)} 万` : price ? "面议" : "未填"}
           </p>
           <select value={priceType} onChange={(e) => setPriceType(e.target.value as "amount" | "negotiable")}>
             <option value="amount">标价</option>
