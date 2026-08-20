@@ -10,6 +10,9 @@
 4. 不修改 docs/decisions/ 下已有文件，只能新增。
 5. 不修改 brief.md 和 review/ 下的文件——它们是历史快照。
 6. 省上下文：编码与小改只读该 feature 的 spec、已引用 ADR、contracts 中相关 path；禁止通读 review/ 与 conflicts.md。全量五方 `/review` 仅用于跨端+状态机+钱/权限。`/review F-00x api,qa` 可收窄角色。
+7. 需求改动前先用 Grep/Glob 按契约字段名、接口路径定位涉及文件，禁止让 agent 先"通读全仓库/全端理解"再改；范围确认后只进入命中的文件。
+8. 批量机械性改动（改名、替换固定字符串等）直接用 Edit 的 replace_all 或 sed 在已确认的文件列表上做，不逐文件调用 agent 判断。
+9. 需求涉及多端（server/admin-web/public-web）时按端拆分处理，一端做完可 `/clear` 或开新会话再做下一端，不在同一个长对话里累积多端上下文。
 
 ## 关键路径
 | 路径 | 作用 |
