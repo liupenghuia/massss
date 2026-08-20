@@ -28,6 +28,10 @@ type ImageItem = { id: number; url: string; caption: string };
 
 type ReportItem = { id: number; url: string; contentType: string; byteSize: number };
 
+type PriceRecordItem = { id: number; from: PriceValue; to: PriceValue; createdAt: string };
+
+type UploadTask = { name: string; status: "uploading" | "done" | "failed" };
+
 const emptyForm = {
   brand: "",
   model: "",
@@ -56,6 +60,9 @@ export function VehiclesPanel() {
   const [price, setPrice] = useState<PriceValue | null>(null);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [reports, setReports] = useState<ReportItem[]>([]);
+  const [priceRecords, setPriceRecords] = useState<PriceRecordItem[]>([]);
+  const [imageUploads, setImageUploads] = useState<UploadTask[]>([]);
+  const [reportUploads, setReportUploads] = useState<UploadTask[]>([]);
   const [priceType, setPriceType] = useState<"amount" | "negotiable">("amount");
   const [priceAmount, setPriceAmount] = useState("1.00");
   const [copied, setCopied] = useState("");
@@ -126,6 +133,8 @@ export function VehiclesPanel() {
     setImages(imgs.items);
     const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${v.id}/reports`);
     setReports(reps.items);
+    const records = await api<{ items: PriceRecordItem[] }>(`/admin/vehicles/${v.id}/price-records`);
+    setPriceRecords(records.items);
   }
 
   async function saveSelected() {
@@ -182,51 +191,63 @@ export function VehiclesPanel() {
         body: JSON.stringify(body),
       });
       setPrice(data.current);
+      const records = await api<{ items: PriceRecordItem[] }>(`/admin/vehicles/${selected.id}/price-records`);
+      setPriceRecords(records.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "改价失败");
     }
   }
 
-  async function uploadImage(file: File) {
+  async function uploadImages(files: File[]) {
     if (!selected) return;
     setError("");
-    try {
-      const contentType = file.type || "image/jpeg";
-      const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
-        `/admin/vehicles/${selected.id}/images/presign`,
-        { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) }
-      );
-      await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
-      await api(`/admin/vehicles/${selected.id}/images`, {
-        method: "POST",
-        body: JSON.stringify({ objectKey: presign.objectKey, caption: "" }),
-      });
-      const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${selected.id}/images`);
-      setImages(imgs.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "上传失败");
+    setImageUploads(files.map((f) => ({ name: f.name, status: "uploading" })));
+    for (const file of files) {
+      try {
+        const contentType = file.type || "image/jpeg";
+        const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
+          `/admin/vehicles/${selected.id}/images/presign`,
+          { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) }
+        );
+        await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
+        await api(`/admin/vehicles/${selected.id}/images`, {
+          method: "POST",
+          body: JSON.stringify({ objectKey: presign.objectKey, caption: "" }),
+        });
+        setImageUploads((prev) => prev.map((t) => (t.name === file.name ? { ...t, status: "done" } : t)));
+      } catch (err) {
+        setImageUploads((prev) => prev.map((t) => (t.name === file.name ? { ...t, status: "failed" } : t)));
+        setError(err instanceof Error ? err.message : "上传失败");
+      }
     }
+    const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${selected.id}/images`);
+    setImages(imgs.items);
   }
 
-  async function uploadReport(file: File) {
+  async function uploadReports(files: File[]) {
     if (!selected) return;
     setError("");
-    try {
-      const contentType = file.type || "application/pdf";
-      const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
-        `/admin/vehicles/${selected.id}/reports/presign`,
-        { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) }
-      );
-      await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
-      await api(`/admin/vehicles/${selected.id}/reports`, {
-        method: "POST",
-        body: JSON.stringify({ objectKey: presign.objectKey }),
-      });
-      const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${selected.id}/reports`);
-      setReports(reps.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "上传失败");
+    setReportUploads(files.map((f) => ({ name: f.name, status: "uploading" })));
+    for (const file of files) {
+      try {
+        const contentType = file.type || "application/pdf";
+        const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
+          `/admin/vehicles/${selected.id}/reports/presign`,
+          { method: "POST", body: JSON.stringify({ contentType, byteSize: file.size }) }
+        );
+        await fetch(presign.uploadUrl, { method: "PUT", headers: presign.requiredHeaders, body: file }).catch(() => undefined);
+        await api(`/admin/vehicles/${selected.id}/reports`, {
+          method: "POST",
+          body: JSON.stringify({ objectKey: presign.objectKey }),
+        });
+        setReportUploads((prev) => prev.map((t) => (t.name === file.name ? { ...t, status: "done" } : t)));
+      } catch (err) {
+        setReportUploads((prev) => prev.map((t) => (t.name === file.name ? { ...t, status: "failed" } : t)));
+        setError(err instanceof Error ? err.message : "上传失败");
+      }
     }
+    const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${selected.id}/reports`);
+    setReports(reps.items);
   }
 
   async function deleteReport(reportId: number) {
@@ -410,6 +431,16 @@ export function VehiclesPanel() {
           <button type="button" onClick={() => void savePrice()}>
             改价
           </button>
+          <p>价格历史</p>
+          <ul>
+            {priceRecords.map((r) => (
+              <li key={r.id}>
+                {r.createdAt}：
+                {r.from.type === "amount" ? `${(r.from.amount / 10000).toFixed(2)} 万` : "面议"} →{" "}
+                {r.to.type === "amount" ? `${(r.to.amount / 10000).toFixed(2)} 万` : "面议"}
+              </li>
+            ))}
+          </ul>
           <p>图片（已上架至少 4 张）</p>
           <ul>
             {images.map((img) => (
@@ -418,14 +449,35 @@ export function VehiclesPanel() {
               </li>
             ))}
           </ul>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void uploadImage(f);
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const files = Array.from(e.dataTransfer.files);
+              if (files.length) void uploadImages(files);
             }}
-          />
+            style={{ border: "1px dashed #999", padding: "8px" }}
+          >
+            拖拽图片到此处上传，或
+            <input
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) void uploadImages(files);
+              }}
+            />
+          </div>
+          {imageUploads.length ? (
+            <ul>
+              {imageUploads.map((t) => (
+                <li key={t.name}>
+                  {t.name}：{t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <p>评估报告</p>
           <ul>
             {reports.map((r) => (
@@ -439,14 +491,35 @@ export function VehiclesPanel() {
               </li>
             ))}
           </ul>
-          <input
-            type="file"
-            accept="application/pdf,image/jpeg,image/png"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void uploadReport(f);
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const files = Array.from(e.dataTransfer.files);
+              if (files.length) void uploadReports(files);
             }}
-          />
+            style={{ border: "1px dashed #999", padding: "8px" }}
+          >
+            拖拽报告到此处上传，或
+            <input
+              type="file"
+              multiple
+              accept="application/pdf,image/jpeg,image/png"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) void uploadReports(files);
+              }}
+            />
+          </div>
+          {reportUploads.length ? (
+            <ul>
+              {reportUploads.map((t) => (
+                <li key={t.name}>
+                  {t.name}：{t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
     </section>
