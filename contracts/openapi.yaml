@@ -370,12 +370,83 @@ paths:
       summary: 公开车辆列表
       description: |
         仅返回 published。服务端硬过滤，不接受客户端传 status。
-        不含 vin / vinMasked / 价格 / 图片。分页按可增长规模设计。
-        默认按 id 降序。
+        不含 vin / vinMasked / 图片；列表项含 coverImageUrl 与 currentPrice（聚合字段，见
+        PublicVehicleSummary）。分页按可增长规模设计。
+        默认按 id 降序，不受筛选影响。
+
+        keyword / priceMin / priceMax / registrationYearMin / registrationYearMax /
+        mileageKmMin / mileageKmMax 均为可选参数，可任意组合，组合语义为 AND；不传即当前行为
+        （全量已上架列表）。
+
+        分页越界（筛选后命中总数 < (page-1)×pageSize）返回 items: []，total 为筛选后匹配总数，
+        不报错。无匹配结果：total 为 0，items 为空数组，page/pageSize 原样返回。
+
+        区间参数下限 > 上限（priceMin>priceMax / registrationYearMin>registrationYearMax /
+        mileageKmMin>mileageKmMax）：400 VALIDATION_ERROR。
       security: []
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
+        - name: keyword
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+          description: |
+            模糊匹配品牌+车型，服务端 trim 后按不区分大小写匹配；trim 后为空字符串等价于未传。
+        - name: priceMin
+          in: query
+          required: false
+          schema:
+            type: number
+            exclusiveMinimum: 0
+            multipleOf: 0.01
+          description: |
+            当前价下限（人民币元）。使用价格区间筛选（priceMin/priceMax 任一存在）时面谈车
+            （amount=null）一律不进结果集。服务端按分为单位（乘 100 取整）比较，不依赖 schema
+            multipleOf 的浮点判定。priceMin > priceMax 返回 400 VALIDATION_ERROR。
+        - name: priceMax
+          in: query
+          required: false
+          schema:
+            type: number
+            exclusiveMinimum: 0
+            multipleOf: 0.01
+          description: 当前价上限，规则同 priceMin。
+        - name: registrationYearMin
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1980
+            maximum: 2100
+          description: |
+            上牌年份下限；registrationYearMin > registrationYearMax 返回 400 VALIDATION_ERROR。
+        - name: registrationYearMax
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1980
+            maximum: 2100
+          description: 上牌年份上限，规则同 registrationYearMin。
+        - name: mileageKmMin
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: |
+            里程下限（千米）；mileageKmMin > mileageKmMax 返回 400 VALIDATION_ERROR。
+        - name: mileageKmMax
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: 里程上限，规则同 mileageKmMin。
       responses:
         "200":
           description: 已上架车辆分页列表
@@ -1297,6 +1368,87 @@ components:
           type: string
           format: date-time
 
+    PublicVehicleSummary:
+      type: object
+      additionalProperties: false
+      description: 公开车辆列表项。字段为 PublicVehicle 加列表专用聚合字段，供 GET /public/vehicles 使用。
+      required:
+        - id
+        - status
+        - brand
+        - model
+        - registrationYear
+        - mileageKm
+        - color
+        - conditionDesc
+        - energyType
+        - transferCount
+        - displacementL
+        - energyConsumption
+        - batteryKwh
+        - createdAt
+        - updatedAt
+        - coverImageUrl
+        - currentPrice
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        status:
+          type: string
+          enum: [published]
+          description: 公开端恒为 published
+        brand:
+          type: string
+          description: 品牌
+        model:
+          type: string
+          description: 车型
+        registrationYear:
+          type: integer
+          description: 上牌年份（公元纪年）
+        mileageKm:
+          type: integer
+          minimum: 0
+          description: 里程（千米）
+        color:
+          type: string
+          description: 颜色
+        conditionDesc:
+          type: string
+          description: 车况描述
+        energyType:
+          $ref: "#/components/schemas/EnergyType"
+        transferCount:
+          type: integer
+          minimum: 0
+          description: 过户次数（手数）
+        displacementL:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 排量（升）。不适用时为 null。
+        energyConsumption:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电耗。不适用时为 null。
+        batteryKwh:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          description: 电池度数（kWh）。不适用时为 null。
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        coverImageUrl:
+          type: [string, "null"]
+          description: 封面缩略图 URL，服务端保证的字段；无图片时为 null。不由前端拼 CDN 参数。
+        currentPrice:
+          $ref: "#/components/schemas/PriceValue"
+          description: 当前价，等于该车最新一条价格记录的变动后值。面谈车 amount 为 null。
+
     AdminVehicleCreateRequest:
       type: object
       additionalProperties: false
@@ -1443,7 +1595,7 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/PublicVehicle"
+            $ref: "#/components/schemas/PublicVehicleSummary"
         page:
           type: integer
           minimum: 1
@@ -1453,6 +1605,7 @@ components:
         total:
           type: integer
           minimum: 0
+          description: 筛选后匹配总数
 
     ImageContentType:
       type: string
