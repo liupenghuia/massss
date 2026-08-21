@@ -626,6 +626,8 @@ paths:
                 $ref: "#/components/schemas/PublicVehicleList"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -649,6 +651,8 @@ paths:
                 $ref: "#/components/schemas/PublicVehicle"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1111,6 +1115,8 @@ paths:
                 $ref: "#/components/schemas/PublicVehicleImageList"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1135,6 +1141,8 @@ paths:
                 $ref: "#/components/schemas/PublicVehicleReportList"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1289,6 +1297,8 @@ paths:
                 $ref: "#/components/schemas/PublicPriceView"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1318,6 +1328,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/VehicleNotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1717,6 +1729,16 @@ components:
           example:
             code: INTERNAL_ERROR
             message: 服务内部错误
+            details: {}
+    TooManyRequests:
+      description: 公开只读接口 IP 级限流触发（窗口 60 秒、阈值 1000 次/IP）
+      content:
+        application/json:
+          schema:
+            $ref: "./errors.yaml#/components/schemas/ErrorResponse"
+          example:
+            code: TOO_MANY_REQUESTS
+            message: 请求过于频繁，请稍后再试
             details: {}
 
   schemas:

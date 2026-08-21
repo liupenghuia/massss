@@ -1,7 +1,7 @@
 # 统一错误码表（人读 + 可供 openapi.yaml $ref）
 # first release，not breaking。contracts/ 此前为空，本次全部新增。
 
-version: "1.0.0"
+version: "1.1.0"
 breakingChange: false
 
 # 通用错误响应：所有 HTTP 错误体均为本结构。
@@ -42,6 +42,7 @@ components:
         - ACCOUNT_LOGIN_NAME_TAKEN
         - CANNOT_DISABLE_SELF
         - LAST_SUPER_ADMIN
+        - TOO_MANY_REQUESTS
 
     ErrorResponse:
       type: object
@@ -388,3 +389,12 @@ codes:
       F-006。POST /admin/accounts/{accountId}/status（enabled=false）或
       POST /admin/accounts/{accountId}/role（降级为 admin）时，目标是系统里
       最后一个启用状态的 super_admin。
+
+  - code: TOO_MANY_REQUESTS
+    httpStatus: 429
+    fixedMessage: false
+    message: 请求过于频繁，请稍后再试
+    details: {}
+    note: |
+      F-002。公开只读接口（GET /public/*）的 IP 级限流触发：窗口 60 秒、阈值 1000 次/IP。
+      仅作用于公开接口，不含管理端登录限流（登录限流为账号级 15 分钟锁定机制，见 ACCOUNT_LOCKED）。

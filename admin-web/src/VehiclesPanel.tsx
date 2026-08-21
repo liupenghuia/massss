@@ -300,8 +300,22 @@ export function VehiclesPanel() {
     setReports(reps.items);
   }
 
+  async function deleteImage(imageId: number) {
+    if (!selected) return;
+    if (!window.confirm("确认删除这张图片？")) return;
+    setError("");
+    try {
+      await api(`/admin/vehicles/${selected.id}/images/${imageId}`, { method: "DELETE" });
+      const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${selected.id}/images`);
+      setImages(imgs.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败");
+    }
+  }
+
   async function deleteReport(reportId: number) {
     if (!selected) return;
+    if (!window.confirm("确认删除这份评估报告？")) return;
     setError("");
     try {
       await api(`/admin/vehicles/${selected.id}/reports/${reportId}`, { method: "DELETE" });
@@ -695,6 +709,14 @@ export function VehiclesPanel() {
                           onBlur={(e) => void saveCaption(img.id, e.target.value)}
                           style={{ marginTop: 6, padding: "6px 12px" }}
                         />
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ marginTop: 6, width: "100%" }}
+                          onClick={() => void deleteImage(img.id)}
+                        >
+                          删除
+                        </button>
                       </div>
                     ))}
                     <div>

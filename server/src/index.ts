@@ -13,6 +13,7 @@ import { adminRecycleRouter } from "./routes/adminRecycle";
 import { errorHandler } from "./middleware/errorHandler";
 import { adminAuth } from "./middleware/adminAuth";
 import { csrfOrigin } from "./middleware/csrfOrigin";
+import { publicGuard } from "./middleware/publicGuard";
 import { seedSuperAdminIfNeeded } from "./seed/superAdmin";
 import { startPurgeScheduler } from "./services/purgeRecycleBin";
 import { getObjectStorage } from "./lib/objectStorage";
@@ -30,6 +31,7 @@ app.use(adminImagesRouter);
 app.use(adminReportsRouter);
 app.use(adminPricesRouter);
 app.use(adminRecycleRouter);
+app.use(publicGuard);
 app.use(publicVehiclesRouter);
 app.use(publicMediaRouter);
 
