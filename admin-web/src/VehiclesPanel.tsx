@@ -83,6 +83,12 @@ function statusTag(status: Status): string {
   return "tag tag-outline";
 }
 
+function brandMono(brand: string): string {
+  const t = brand.trim();
+  if (!t) return "车";
+  return t.slice(0, 1);
+}
+
 function formatPrice(p: PriceValue | null | { type: string; amount: number | null }): string {
   if (!p) return "未填";
   if (p.type === "negotiable" || p.type === "unset" || p.amount == null) return "面议";
@@ -119,21 +125,43 @@ export function VehiclesPanel() {
   const [copied, setCopied] = useState("");
   const [info, setInfo] = useState("");
   const [dragId, setDragId] = useState<number | null>(null);
+  const [listLoading, setListLoading] = useState(true);
+  const [formBusy, setFormBusy] = useState(false);
+  const [covers, setCovers] = useState<Record<number, string>>({});
 
   // ADR-041：不写死默认前台域名；缺失时提示配置，禁止拼出空前缀错误链接
   const publicOrigin = (import.meta.env.VITE_PUBLIC_WEB_ORIGIN as string | undefined)?.trim() || "";
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  async function load(nextPage = page) {
+  async function load(nextPage = page, filters?: { status?: Status | ""; q?: string }) {
+    const nextStatus = filters?.status !== undefined ? filters.status : status;
+    const nextQ = filters?.q !== undefined ? filters.q : q;
     setError("");
-    const qs = new URLSearchParams({ page: String(nextPage), pageSize: String(pageSize) });
-    if (status) qs.set("status", status);
-    if (q.trim()) qs.set("q", q.trim());
-    const data = await api<{ items: AdminVehicle[]; total: number }>(`/admin/vehicles?${qs}`);
-    setItems(data.items);
-    setTotal(data.total);
-    setPage(nextPage);
+    setListLoading(true);
+    try {
+      const qs = new URLSearchParams({ page: String(nextPage), pageSize: String(pageSize) });
+      if (nextStatus) qs.set("status", nextStatus);
+      if (nextQ.trim()) qs.set("q", nextQ.trim());
+      const data = await api<{ items: AdminVehicle[]; total: number }>(`/admin/vehicles?${qs}`);
+      setItems(data.items);
+      setTotal(data.total);
+      setPage(nextPage);
+      // 列表卡片封面：按首图填充（失败不阻断列表）
+      void Promise.all(
+        data.items.map(async (v) => {
+          try {
+            const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${v.id}/images`);
+            const url = imgs.items[0]?.url;
+            if (url) setCovers((prev) => (prev[v.id] === url ? prev : { ...prev, [v.id]: url }));
+          } catch {
+            /* ignore cover errors */
+          }
+        }),
+      );
+    } finally {
+      setListLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -179,24 +207,36 @@ export function VehiclesPanel() {
 
   async function open(v: AdminVehicle) {
     setError("");
-    const detail = await api<AdminVehicle>(`/admin/vehicles/${v.id}`);
-    setSelected(detail);
-    const p = await api<{ filled: boolean; current: PriceValue | null }>(`/admin/vehicles/${v.id}/price`);
-    setPrice(p.current);
-    if (p.current?.type === "amount") {
-      setPriceType("amount");
-      setPriceAmount(String(p.current.amount));
-    } else {
-      setPriceType("negotiable");
-    }
-    const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${v.id}/images`);
-    setImages(imgs.items);
-    const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${v.id}/reports`);
-    setReports(reps.items);
-    const records = await api<{ items: PriceRecordItem[] }>(`/admin/vehicles/${v.id}/price-records`);
-    setPriceRecords(records.items);
-    setCopied("");
+    setInfo("");
+    setFormBusy(true);
     setView("form");
+    try {
+      const detail = await api<AdminVehicle>(`/admin/vehicles/${v.id}`);
+      setSelected(detail);
+      const [p, imgs, reps, records] = await Promise.all([
+        api<{ filled: boolean; current: PriceValue | null }>(`/admin/vehicles/${v.id}/price`),
+        api<{ items: ImageItem[] }>(`/admin/vehicles/${v.id}/images`),
+        api<{ items: ReportItem[] }>(`/admin/vehicles/${v.id}/reports`),
+        api<{ items: PriceRecordItem[] }>(`/admin/vehicles/${v.id}/price-records`),
+      ]);
+      setPrice(p.current);
+      if (p.current?.type === "amount") {
+        setPriceType("amount");
+        setPriceAmount(String(p.current.amount));
+      } else {
+        setPriceType("negotiable");
+      }
+      setImages(imgs.items);
+      if (imgs.items[0]?.url) setCovers((prev) => ({ ...prev, [v.id]: imgs.items[0]!.url }));
+      setReports(reps.items);
+      setPriceRecords(records.items);
+      setCopied("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载车辆失败");
+      setView("list");
+    } finally {
+      setFormBusy(false);
+    }
   }
 
   async function saveSelected(): Promise<AdminVehicle | null> {
@@ -231,8 +271,10 @@ export function VehiclesPanel() {
 
   async function act(path: string, vehicle: AdminVehicle = selected as AdminVehicle) {
     if (!vehicle) return;
+    if (path === "trash" && !window.confirm("确认将该车辆移入回收站？可在回收站恢复。")) return;
     setError("");
     setInfo("");
+    setFormBusy(true);
     try {
       const updated = await api<AdminVehicle>(`/admin/vehicles/${vehicle.id}/${path}`, {
         method: "POST",
@@ -252,6 +294,8 @@ export function VehiclesPanel() {
       await load();
     } catch (err) {
       setError(describeError(err, "操作失败"));
+    } finally {
+      setFormBusy(false);
     }
   }
 
@@ -431,10 +475,15 @@ export function VehiclesPanel() {
         <div className="edit-split">
           <form onSubmit={editing ? (e) => { e.preventDefault(); void saveSelected(); } : (e) => void create(e)}>
             <div className="form-head">
-              <h2 style={{ margin: 0 }}>{editing ? `编辑 #${editing.id}` : "新建车辆"}</h2>
+              <h2 className="form-head-title">{editing ? `编辑 #${editing.id}` : "新建车辆"}</h2>
               {editing ? <span className={statusTag(editing.status)}>{STATUS_LABEL[editing.status]}</span> : null}
               {editing ? <span className="page-sub">v{editing.version}</span> : null}
-              <button type="button" className="btn btn-ghost" onClick={() => setView("list")}>
+              {formBusy ? (
+                <span className="page-sub" role="status">
+                  处理中…
+                </span>
+              ) : null}
+              <button type="button" className="btn btn-ghost" onClick={() => setView("list")} disabled={formBusy}>
                 返回列表
               </button>
             </div>
@@ -784,16 +833,18 @@ export function VehiclesPanel() {
                           }}
                         />
                       </label>
-                      {imageUploads.map((t) => (
-                        <div key={t.id} className="page-sub">
-                          {t.name}{" "}
-                          {t.status === "uploading"
-                            ? "上传中…"
-                            : t.status === "done"
-                              ? "完成"
-                              : `失败${t.reason ? `：${t.reason}` : ""}`}
-                        </div>
-                      ))}
+                      <div className="upload-task-list" aria-live="polite">
+                        {imageUploads.map((t) => (
+                          <div key={t.id} className={t.status === "failed" ? "page-sub upload-task-fail" : "page-sub"}>
+                            {t.name}{" "}
+                            {t.status === "uploading"
+                              ? "上传中…"
+                              : t.status === "done"
+                                ? "完成"
+                                : `失败${t.reason ? `：${t.reason}` : ""}`}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -836,16 +887,18 @@ export function VehiclesPanel() {
                       />
                     </label>
                   </div>
-                  {reportUploads.map((t) => (
-                    <div key={t.id} className="page-sub">
-                      {t.name}{" "}
-                      {t.status === "uploading"
-                        ? "上传中…"
-                        : t.status === "done"
-                          ? "完成"
-                          : `失败${t.reason ? `：${t.reason}` : ""}`}
-                    </div>
-                  ))}
+                  <div className="upload-task-list" aria-live="polite">
+                    {reportUploads.map((t) => (
+                      <div key={t.id} className={t.status === "failed" ? "page-sub upload-task-fail" : "page-sub"}>
+                        {t.name}{" "}
+                        {t.status === "uploading"
+                          ? "上传中…"
+                          : t.status === "done"
+                            ? "完成"
+                            : `失败${t.reason ? `：${t.reason}` : ""}`}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </>
             ) : null}
@@ -936,15 +989,17 @@ export function VehiclesPanel() {
     );
   }
 
+  const hasFilters = Boolean(status || q.trim());
+
   return (
     <div>
       <div className="page-head">
         <div>
           <h2>车辆</h2>
-          <p className="page-sub">共 {total} 辆</p>
+          <p className="page-sub">{listLoading ? "加载中…" : `共 ${total} 辆`}</p>
         </div>
         <div className="toolbar">
-          <div className="seg">
+          <div className="seg" role="group" aria-label="按状态筛选">
             {(
               [
                 ["", "全部状态"],
@@ -957,17 +1012,36 @@ export function VehiclesPanel() {
                 key={label}
                 type="button"
                 className="seg-opt"
-                style={status === value ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" } : undefined}
+                aria-pressed={status === value}
                 onClick={() => {
                   setStatus(value);
+                  void load(1, { status: value }).catch((err) =>
+                    setError(err instanceof Error ? err.message : "加载失败"),
+                  );
                 }}
               >
                 {label}
               </button>
             ))}
           </div>
-          <input className="input" placeholder="品牌 / 车型" value={q} onChange={(e) => setQ(e.target.value)} />
-          <button type="button" className="btn btn-secondary" onClick={() => void load(1)}>
+          <input
+            className="input"
+            placeholder="品牌 / 车型 / VIN 后六位"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void load(1).catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
+              }
+            }}
+            aria-label="关键字搜索"
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => void load(1).catch((err) => setError(err instanceof Error ? err.message : "加载失败"))}
+          >
             筛选
           </button>
           <button type="button" className="btn btn-primary" onClick={startCreate}>
@@ -985,33 +1059,75 @@ export function VehiclesPanel() {
           {info}
         </p>
       ) : null}
-      {items.length === 0 ? (
+      {listLoading && items.length === 0 ? (
+        <p className="page-sub" role="status">
+          加载车辆列表…
+        </p>
+      ) : null}
+      {!listLoading && items.length === 0 ? (
         <div className="empty-card">
           <div className="empty-blob" />
-          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>暂无车辆</div>
+          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>
+            {hasFilters ? "没有符合条件的车辆" : "暂无车辆"}
+          </div>
+          <p className="page-sub">
+            {hasFilters ? "换个筛选条件再看看，或清空后查看全部。" : "点击右上角新建第一台车。"}
+          </p>
+          {hasFilters ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setStatus("");
+                setQ("");
+                void load(1, { status: "", q: "" }).catch((err) =>
+                  setError(err instanceof Error ? err.message : "加载失败"),
+                );
+              }}
+            >
+              清空筛选
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary" onClick={startCreate}>
+              新建车辆
+            </button>
+          )}
         </div>
-      ) : (
+      ) : null}
+      {items.length > 0 ? (
         <ul className="vehicle-grid">
-          {items.map((v) => (
-            <li key={v.id}>
-              <button type="button" className="card elev-sm vehicle-card" onClick={() => void open(v)}>
-                <div className="vehicle-card-cover">车辆封面图</div>
-                <div className="vehicle-card-body">
-                  <div className="card-title-row">
-                    <span className="vehicle-card-title">
-                      {v.brand} {v.model}
-                    </span>
-                    <span className={statusTag(v.status)}>{STATUS_LABEL[v.status]}</span>
+          {items.map((v) => {
+            const cover = covers[v.id];
+            return (
+              <li key={v.id}>
+                <button type="button" className="card elev-sm vehicle-card" onClick={() => void open(v)}>
+                  {cover ? (
+                    <div className="vehicle-card-cover">
+                      <ThumbPreview src={cover} alt={`${v.brand} ${v.model}`} />
+                    </div>
+                  ) : (
+                    <div className="vehicle-card-cover vehicle-card-cover-mono" aria-hidden="true">
+                      {brandMono(v.brand)}
+                    </div>
+                  )}
+                  <div className="vehicle-card-body">
+                    <div className="card-title-row">
+                      <span className="vehicle-card-title">
+                        {v.brand || "（未填品牌）"} {v.model || ""}
+                      </span>
+                      <span className={statusTag(v.status)}>{STATUS_LABEL[v.status]}</span>
+                    </div>
+                    <div className="page-sub">
+                      #{v.id} · {v.registrationYear || "—"} 年 · {(v.mileageKm ?? 0).toLocaleString("zh-CN")} 公里
+                      {v.vinMasked ? ` · ${v.vinMasked}` : ""}
+                    </div>
                   </div>
-                  <div className="page-sub">
-                    #{v.id} · v{v.version} · {v.registrationYear} 年 · {v.mileageKm.toLocaleString("zh-CN")} 公里
-                  </div>
-                </div>
-              </button>
-            </li>
-          ))}
+                </button>
+              </li>
+            );
+          })}
         </ul>
-      )}
+      ) : null}
       {totalPages > 1 ? (
         <div className="pager">
           <button type="button" className="btn btn-ghost" disabled={page <= 1} onClick={() => void load(page - 1)}>
