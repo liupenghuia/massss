@@ -17,14 +17,15 @@ export interface VehicleRow {
   id: string; // BIGINT 由 pg 驱动以字符串返回
   status: "draft" | "published" | "unpublished";
   version: string;
-  brand: string;
-  model: string;
-  registration_year: number;
-  mileage_km: number;
-  color: string;
-  condition_desc: string;
-  energy_type: "gasoline" | "ev" | "phev" | "range_extender";
-  transfer_count: number;
+  // ADR-035：草稿阶段允许核心字段缺失，发布时才强制校验（见 publishPrecondition）。
+  brand: string | null;
+  model: string | null;
+  registration_year: number | null;
+  mileage_km: number | null;
+  color: string | null;
+  condition_desc: string | null;
+  energy_type: "gasoline" | "ev" | "phev" | "range_extender" | null;
+  transfer_count: number | null;
   displacement_l: string | null; // NUMERIC 由 pg 驱动以字符串返回
   energy_consumption: string | null;
   battery_kwh: string | null;
@@ -35,6 +36,7 @@ export interface VehicleRow {
   updated_at: Date;
 }
 
+// ADR-035：草稿阶段核心字段允许为 null，AdminVehicle 契约已同步放开为可空（RFC 2026-08-21）。
 export function toAdminVehicle(row: VehicleRow): AdminVehicle {
   return {
     id: Number(row.id),
@@ -60,17 +62,18 @@ export function toAdminVehicle(row: VehicleRow): AdminVehicle {
 }
 
 export function toPublicVehicle(row: VehicleRow): PublicVehicle {
+  // 只有已上架车辆才会走到这里，发布前置校验已保证核心字段非空，此处断言安全。
   return {
     id: Number(row.id),
     status: "published",
-    brand: row.brand,
-    model: row.model,
-    registrationYear: row.registration_year,
-    mileageKm: row.mileage_km,
-    color: row.color,
-    conditionDesc: row.condition_desc,
-    energyType: row.energy_type,
-    transferCount: row.transfer_count,
+    brand: row.brand as string,
+    model: row.model as string,
+    registrationYear: row.registration_year as number,
+    mileageKm: row.mileage_km as number,
+    color: row.color as string,
+    conditionDesc: row.condition_desc as string,
+    energyType: row.energy_type as NonNullable<VehicleRow["energy_type"]>,
+    transferCount: row.transfer_count as number,
     displacementL: row.displacement_l === null ? null : Number(row.displacement_l),
     energyConsumption: row.energy_consumption === null ? null : Number(row.energy_consumption),
     batteryKwh: row.battery_kwh === null ? null : Number(row.battery_kwh),
@@ -79,6 +82,8 @@ export function toPublicVehicle(row: VehicleRow): PublicVehicle {
   };
 }
 
+// ADR-035：回收站车辆可能是草稿态被删，核心字段允许为 null，
+// AdminRecycleBinItem 契约已同步放开为可空（RFC 2026-08-21）。
 export function toRecycleBinItem(row: VehicleRow): AdminRecycleBinItem {
   if (!row.trashed_at) {
     throw new Error("toRecycleBinItem 要求 trashed_at 非空");

@@ -39,14 +39,15 @@ export async function getVehicleForUpdate(client: PoolClient, id: number): Promi
 }
 
 export interface VehicleFieldUpdate {
-  brand: string;
-  model: string;
-  registrationYear: number;
-  mileageKm: number;
-  color: string;
-  conditionDesc: string;
-  energyType: "gasoline" | "ev" | "phev" | "range_extender";
-  transferCount: number;
+  // ADR-035：草稿阶段核心字段允许为空，编辑时同样可以保持/写入 null。
+  brand: string | null;
+  model: string | null;
+  registrationYear: number | null;
+  mileageKm: number | null;
+  color: string | null;
+  conditionDesc: string | null;
+  energyType: "gasoline" | "ev" | "phev" | "range_extender" | null;
+  transferCount: number | null;
   displacementL: number | null;
   energyConsumption: number | null;
   batteryKwh: number | null;
@@ -113,9 +114,12 @@ export async function listVehicles(client: PoolClient, params: ListVehiclesParam
     conditions.push(`status = $${values.length}`);
   }
   if (params.q) {
+    // ADR-037：VIN 按展示的后六位匹配，不支持完整车架号搜索。
     values.push(`%${params.q}%`);
-    const idx = values.length;
-    conditions.push(`(brand ILIKE $${idx} OR model ILIKE $${idx})`);
+    const likeIdx = values.length;
+    values.push(`%${params.q}%`);
+    const vinIdx = values.length;
+    conditions.push(`(brand ILIKE $${likeIdx} OR model ILIKE $${likeIdx} OR RIGHT(vin, 6) ILIKE $${vinIdx})`);
   }
   conditions.push("trashed_at IS NULL");
   const where = `WHERE ${conditions.join(" AND ")}`;
@@ -227,16 +231,17 @@ export async function listPublishedVehicles(
     conditions.push(`v.mileage_km <= $${values.length}`);
   }
 
+  // ADR-074：库内金额为分；筛选入参为元，比较前换算为分
   const usePrice = params.priceMin !== undefined || params.priceMax !== undefined;
   if (usePrice) {
     conditions.push(`pr.to_type = 'amount' AND pr.to_amount IS NOT NULL`);
     if (params.priceMin !== undefined) {
       values.push(Math.round(params.priceMin * 100));
-      conditions.push(`ROUND(pr.to_amount * 100)::bigint >= $${values.length}`);
+      conditions.push(`pr.to_amount >= $${values.length}`);
     }
     if (params.priceMax !== undefined) {
       values.push(Math.round(params.priceMax * 100));
-      conditions.push(`ROUND(pr.to_amount * 100)::bigint <= $${values.length}`);
+      conditions.push(`pr.to_amount <= $${values.length}`);
     }
   }
 
@@ -247,7 +252,7 @@ export async function listPublishedVehicles(
     ) img ON true
     LEFT JOIN LATERAL (
       SELECT to_type, to_amount FROM vehicle_price_records WHERE vehicle_id = v.id
-      ORDER BY created_at DESC, id DESC LIMIT 1
+      ORDER BY id DESC LIMIT 1
     ) pr ON true
   `;
   const where = `WHERE ${conditions.join(" AND ")}`;
@@ -263,16 +268,27 @@ export async function listPublishedVehicles(
   return { items: itemsResult.rows, total };
 }
 
+/** 到期候选（不加行锁）；真正清除时逐条 FOR UPDATE 二次校验（ADR-086）。 */
 export async function listDueForPurge(client: PoolClient): Promise<VehicleRow[]> {
   const result = await client.query<VehicleRow>(
     `SELECT * FROM vehicles
      WHERE trashed_at IS NOT NULL AND purged = FALSE
        AND trashed_at <= now() - interval '720 hours'
-     FOR UPDATE SKIP LOCKED`
+     ORDER BY id ASC`
   );
   return result.rows;
 }
 
-export async function markPurged(client: PoolClient, id: number): Promise<void> {
-  await client.query(`UPDATE vehicles SET purged = TRUE, updated_at = now() WHERE id = $1`, [id]);
+/**
+ * ADR-086：仅当仍在回收站且未清除时置 purged=true。
+ * @returns 是否实际标记成功（已被恢复则 false，跳过不报错）
+ */
+export async function markPurgedIfStillTrashed(client: PoolClient, id: number): Promise<boolean> {
+  const result = await client.query(
+    `UPDATE vehicles SET purged = TRUE, updated_at = now()
+     WHERE id = $1 AND trashed_at IS NOT NULL AND purged = FALSE
+     RETURNING id`,
+    [id]
+  );
+  return (result.rowCount ?? 0) > 0;
 }

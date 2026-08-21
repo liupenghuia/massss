@@ -47,12 +47,23 @@ export function illegalStatusTransition(from: string, action: "publish" | "unpub
   return new AppError("ILLEGAL_STATUS_TRANSITION", 409, "非法的车辆状态转换", { from, action });
 }
 
-export function publishPreconditionFailed(missing: Array<"images" | "price">, imageCount: number, priceFilled: boolean): AppError {
+export function publishPreconditionFailed(
+  missing: Array<"images" | "price" | "coreFields">,
+  imageCount: number,
+  priceFilled: boolean,
+  missingCoreFields?: string[]
+): AppError {
   return new AppError("PUBLISH_PRECONDITION_FAILED", 422, "不满足发布前置条件", {
     missing,
     imageCount,
     priceFilled,
+    ...(missingCoreFields ? { missingCoreFields } : {}),
   });
+}
+
+export function vehicleVinDuplicate(): AppError {
+  // message 固定，禁止改写（contracts/errors.yaml）
+  return new AppError("VEHICLE_VIN_DUPLICATE", 409, "该车架号已被其他车辆使用");
 }
 
 export function internalError(): AppError {
@@ -126,6 +137,11 @@ export function accountDisabled(): AppError {
 
 export function accountLocked(): AppError {
   return new AppError("ACCOUNT_LOCKED", 403, "账号已被锁定，请稍后再试");
+}
+
+/** ADR-103 / F-002：IP 限流优先返回 429 */
+export function tooManyRequests(): AppError {
+  return new AppError("TOO_MANY_REQUESTS", 429, "请求过于频繁，请稍后再试");
 }
 
 export function accountLoginNameTaken(): AppError {

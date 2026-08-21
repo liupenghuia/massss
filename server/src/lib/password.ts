@@ -11,8 +11,14 @@ export async function verifyPassword(plain: string, passwordHash: string): Promi
   return bcrypt.compare(plain, passwordHash);
 }
 
+/**
+ * 密码策略：≥8 且含字母与数字（既有规则）；
+ * ADR-105：上限 72 字符；禁止控制字符；其余可打印 UTF-8 不限。
+ */
 export function passwordMeetsPolicy(plain: string): boolean {
-  if (plain.length < 8) return false;
+  if (plain.length < 8 || plain.length > 72) return false;
+  // 拒绝 C0 控制符与 DEL
+  if (/[\u0000-\u001F\u007F]/.test(plain)) return false;
   return /[A-Za-z]/.test(plain) && /[0-9]/.test(plain);
 }
 

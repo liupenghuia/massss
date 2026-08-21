@@ -12,7 +12,8 @@ import { validationError } from "../lib/errors";
  */
 export function mergePatch(row: VehicleRow, patch: PatchVehicleInput): VehicleFieldUpdate {
   const finalEnergyType = patch.energyType ?? row.energy_type;
-  const inapplicable = inapplicableFields(finalEnergyType);
+  // 草稿阶段能源类型可能仍未填写（null），此时无法判断字段是否适用，不做限制。
+  const inapplicable = finalEnergyType === null ? [] : inapplicableFields(finalEnergyType);
 
   const displacementL = resolveLinkedField(
     "displacementL",

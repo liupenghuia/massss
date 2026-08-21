@@ -11,6 +11,7 @@ import {
   accountDisabled,
   accountLocked,
   invalidCredentials,
+  tooManyRequests,
   unauthorized,
   validationError,
 } from "../lib/errors";
@@ -49,8 +50,9 @@ function sessionInfo(account: { id: number; login_name: string; role: "admin" | 
 
 adminAuthRouter.post("/admin/auth/login", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // ADR-103：IP 限流先于账号锁定，超限 429 TOO_MANY_REQUESTS
     if (isIpRateLimited(clientIp(req))) {
-      throw invalidCredentials();
+      throw tooManyRequests();
     }
     const loginName = typeof req.body?.loginName === "string" ? req.body.loginName : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";

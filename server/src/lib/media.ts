@@ -9,6 +9,8 @@ export type ReportContentType = (typeof REPORT_CONTENT_TYPES)[number];
 export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const REPORT_MAX_BYTES = 20 * 1024 * 1024;
 export const IMAGE_COUNT_WARN_THRESHOLD = 100;
+/** ADR-057：图片说明长度上限（字符） */
+export const CAPTION_MAX_LENGTH = 200;
 
 const IMAGE_EXTENSION_BY_CONTENT_TYPE: Record<ImageContentType, string> = {
   "image/jpeg": "jpg",
@@ -70,9 +72,14 @@ export function classifyObjectKeyConfirm(
   return belongsToVehicle ? "proceed" : "invalid";
 }
 
-/** ConfirmImageRequest.caption 省略视为空字符串（契约）。 */
+/** ConfirmImageRequest.caption 省略视为空字符串（契约）。超长由调用方按 VALIDATION_ERROR 处理（ADR-057）。 */
 export function resolveCaption(caption: unknown): string {
   if (caption === undefined) return "";
   if (typeof caption !== "string") throw new TypeError("caption must be a string");
   return caption;
+}
+
+/** ADR-057：caption 是否超过长度上限。 */
+export function isCaptionTooLong(caption: string): boolean {
+  return caption.length > CAPTION_MAX_LENGTH;
 }

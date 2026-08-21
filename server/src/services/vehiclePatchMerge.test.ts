@@ -78,4 +78,19 @@ describe("mergePatch（编辑与状态解耦，ADR-002 能源类型联动）", (
     expect(result.energyConsumption).toBeNull();
     expect(result.batteryKwh).toBeNull();
   });
+
+  // ADR-035：草稿阶段核心字段（含 energyType）允许为 null。
+  test("草稿 energyType 仍为 null 时，联动字段不受限制", () => {
+    const row = baseRow({ energy_type: null, displacement_l: null, energy_consumption: null, battery_kwh: null });
+    const result = mergePatch(row, { batteryKwh: 60 });
+    expect(result.batteryKwh).toBe(60);
+    expect(result.energyType).toBeNull();
+  });
+
+  test("草稿核心字段为 null 时，省略字段合并结果保持 null", () => {
+    const row = baseRow({ brand: null, model: null });
+    const result = mergePatch(row, {});
+    expect(result.brand).toBeNull();
+    expect(result.model).toBeNull();
+  });
 });

@@ -5,6 +5,7 @@ import { getObjectStorage } from "../lib/objectStorage";
 import {
   buildImageObjectKey,
   classifyObjectKeyConfirm,
+  isCaptionTooLong,
   isImageContentType,
   objectKeyBelongsToVehicleImages,
   resolveCaption,
@@ -86,7 +87,13 @@ adminImagesRouter.post("/admin/vehicles/:id/images", async (req: Request, res: R
     if (typeof objectKey !== "string" || objectKey.length < 1) {
       throw validationError([{ field: "objectKey", reason: "REQUIRED" }]);
     }
-    const caption = resolveCaption(body.caption);
+    let caption: string;
+    try {
+      caption = resolveCaption(body.caption);
+    } catch {
+      throw validationError([{ field: "caption", reason: "TYPE" }]);
+    }
+    if (isCaptionTooLong(caption)) throw validationError([{ field: "caption", reason: "MAX_LENGTH" }]);
 
     await client.query("BEGIN");
     await requireVehicleForWrite(client, vehicleId, true);
@@ -215,6 +222,7 @@ adminImagesRouter.patch("/admin/vehicles/:id/images/:imageId", async (req: Reque
 
     const body = (req.body ?? {}) as Record<string, unknown>;
     if (typeof body.caption !== "string") throw validationError([{ field: "caption", reason: "REQUIRED" }]);
+    if (isCaptionTooLong(body.caption)) throw validationError([{ field: "caption", reason: "MAX_LENGTH" }]);
 
     await client.query("BEGIN");
     await requireVehicle(client, vehicleId);

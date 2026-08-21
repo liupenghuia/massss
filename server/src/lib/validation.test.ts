@@ -19,14 +19,70 @@ describe("validateCreateRequest", () => {
     expect(input.vin).toBeNull();
   });
 
-  test("缺少必填字段 -> VALIDATION_ERROR", () => {
+  // ADR-035：草稿保存不强制核心字段非空，仅发布时才校验，创建接口因此允许缺字段。
+  test("核心字段缺失 -> 允许保存为草稿，缺失字段落为 null", () => {
+    const input = validateCreateRequest({ brand: "大众" });
+    expect(input.brand).toBe("大众");
+    expect(input.model).toBeNull();
+    expect(input.registrationYear).toBeNull();
+    expect(input.mileageKm).toBeNull();
+    expect(input.color).toBeNull();
+    expect(input.conditionDesc).toBeNull();
+    expect(input.energyType).toBeNull();
+    expect(input.transferCount).toBeNull();
+  });
+
+  test("空 body -> 全部核心字段落为 null，不报错", () => {
+    const input = validateCreateRequest({});
+    expect(input.brand).toBeNull();
+    expect(input.vin).toBeNull();
+  });
+
+  test("提供了核心字段但类型不对 -> VALIDATION_ERROR", () => {
     try {
-      validateCreateRequest({ brand: "大众" });
+      validateCreateRequest({ mileageKm: "abc" });
       expect.unreachable();
     } catch (err) {
       expect(err).toBeInstanceOf(AppError);
       expect((err as AppError).code).toBe("VALIDATION_ERROR");
     }
+  });
+
+  // ADR-038 第2条：字段取值范围。
+  test("上牌年份早于 1980 -> VALIDATION_ERROR", () => {
+    try {
+      validateCreateRequest({ registrationYear: 1979 });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as AppError).code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  test("上牌年份晚于 2100 -> VALIDATION_ERROR", () => {
+    try {
+      validateCreateRequest({ registrationYear: 2101 });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as AppError).code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  test("上牌年份边界值 1980/2100 合法", () => {
+    expect(validateCreateRequest({ registrationYear: 1980 }).registrationYear).toBe(1980);
+    expect(validateCreateRequest({ registrationYear: 2100 }).registrationYear).toBe(2100);
+  });
+
+  test("车况描述超过 500 字 -> VALIDATION_ERROR", () => {
+    try {
+      validateCreateRequest({ conditionDesc: "a".repeat(501) });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as AppError).code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  test("车况描述恰好 500 字合法", () => {
+    expect(validateCreateRequest({ conditionDesc: "a".repeat(500) }).conditionDesc).toBe("a".repeat(500));
   });
 
   test("纯电车传 displacementL -> VALIDATION_ERROR（不适用于能源类型）", () => {
@@ -68,5 +124,23 @@ describe("validatePatchRequest", () => {
   test("显式 null 用于清空选填字段", () => {
     const result = validatePatchRequest({ vin: null });
     expect(result.vin).toBeNull();
+  });
+
+  test("上牌年份超出范围 -> VALIDATION_ERROR", () => {
+    try {
+      validatePatchRequest({ registrationYear: 1900 });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as AppError).code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  test("车况描述超过 500 字 -> VALIDATION_ERROR", () => {
+    try {
+      validatePatchRequest({ conditionDesc: "a".repeat(501) });
+      expect.unreachable();
+    } catch (err) {
+      expect((err as AppError).code).toBe("VALIDATION_ERROR");
+    }
   });
 });

@@ -15,6 +15,7 @@ import {
   versionConflict,
   illegalStatusTransition,
   vehicleInRecycleBin,
+  vehicleVinDuplicate,
 } from "../lib/errors";
 import { getVehicleById, getVehicleForUpdate, insertVehicle, listVehicles, updateVehicleFields, updateVehicleStatus } from "../db/vehicleRepo";
 import { findIdempotencyKey, hashRequestBody, saveIdempotencyKey } from "../db/idempotencyRepo";
@@ -30,6 +31,18 @@ export const adminVehiclesRouter = Router();
 
 function etag(version: number): string {
   return `"${version}"`;
+}
+
+/** ADR-036：vehicles_vin_unique_idx 唯一索引冲突（pg 错误码 23505）判定为 VIN 重复。 */
+function isVinUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: unknown }).code === "23505" &&
+    "constraint" in err &&
+    (err as { constraint: unknown }).constraint === "vehicles_vin_unique_idx"
+  );
 }
 
 function parseVehicleId(raw: string): number {
@@ -84,7 +97,12 @@ adminVehiclesRouter.post("/admin/vehicles", async (req: Request, res: Response, 
       return;
     }
 
-    const row = await insertVehicle(client, input);
+    let row;
+    try {
+      row = await insertVehicle(client, input);
+    } catch (err) {
+      throw isVinUniqueViolation(err) ? vehicleVinDuplicate() : err;
+    }
     if (initialPrice) {
       await insertInitialPriceRecord(client, Number(row.id), initialPrice, req.operatorId);
     }
@@ -185,7 +203,12 @@ adminVehiclesRouter.patch("/admin/vehicles/:id", async (req: Request, res: Respo
     }
 
     const fields = mergePatch(row, patch);
-    const updated = await updateVehicleFields(client, id, fields);
+    let updated;
+    try {
+      updated = await updateVehicleFields(client, id, fields);
+    } catch (err) {
+      throw isVinUniqueViolation(err) ? vehicleVinDuplicate() : err;
+    }
     await client.query("COMMIT");
 
     const vehicle = toAdminVehicle(updated);
@@ -242,10 +265,19 @@ adminVehiclesRouter.post("/admin/vehicles/:id/publish", async (req: Request, res
       throw internalError();
     }
 
-    const precondition = evaluatePublishPrecondition(imageCount, priceFilled);
+    const precondition = evaluatePublishPrecondition(imageCount, priceFilled, {
+      brand: row.brand,
+      model: row.model,
+      registrationYear: row.registration_year,
+      mileageKm: row.mileage_km,
+      color: row.color,
+      conditionDesc: row.condition_desc,
+      energyType: row.energy_type,
+      transferCount: row.transfer_count,
+    });
     if (!precondition.ok) {
       await client.query("ROLLBACK");
-      throw publishPreconditionFailed(precondition.missing, imageCount, priceFilled);
+      throw publishPreconditionFailed(precondition.missing, imageCount, priceFilled, precondition.missingCoreFields);
     }
 
     const updated = await updateVehicleStatus(client, id, "published");

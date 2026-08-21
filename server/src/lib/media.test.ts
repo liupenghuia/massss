@@ -4,8 +4,10 @@ import {
   classifyObjectKeyConfirm,
   objectKeyBelongsToVehicleImages,
   resolveCaption,
+  isCaptionTooLong,
   isImageContentType,
   isReportContentType,
+  CAPTION_MAX_LENGTH,
 } from "./media";
 
 describe("resolveCaption", () => {
@@ -23,6 +25,16 @@ describe("resolveCaption", () => {
 
   test("非字符串类型抛错", () => {
     expect(() => resolveCaption(123)).toThrow(TypeError);
+  });
+});
+
+describe("isCaptionTooLong (ADR-057)", () => {
+  test("等于上限不算超长", () => {
+    expect(isCaptionTooLong("x".repeat(CAPTION_MAX_LENGTH))).toBe(false);
+  });
+
+  test("超过上限判定超长", () => {
+    expect(isCaptionTooLong("x".repeat(CAPTION_MAX_LENGTH + 1))).toBe(true);
   });
 });
 

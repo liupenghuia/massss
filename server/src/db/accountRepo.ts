@@ -97,10 +97,18 @@ export async function updatePassword(
 }
 
 export async function setAccountEnabled(client: PoolClient, id: number, enabled: boolean): Promise<AccountRow> {
-  const r = await client.query<AccountRow>(
-    `UPDATE accounts SET enabled = $2, updated_at = now() WHERE id = $1 RETURNING *`,
-    [id, enabled]
-  );
+  // ADR-101：从停用重新启用时强制 must_change_password = true
+  const r = enabled
+    ? await client.query<AccountRow>(
+        `UPDATE accounts
+         SET enabled = TRUE, must_change_password = TRUE, updated_at = now()
+         WHERE id = $1 RETURNING *`,
+        [id]
+      )
+    : await client.query<AccountRow>(
+        `UPDATE accounts SET enabled = FALSE, updated_at = now() WHERE id = $1 RETURNING *`,
+        [id]
+      );
   return r.rows[0];
 }
 

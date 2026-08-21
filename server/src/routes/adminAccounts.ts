@@ -20,6 +20,7 @@ import {
   lastSuperAdmin,
   validationError,
 } from "../lib/errors";
+// cannotDisableSelf 文案覆盖「不能对自己的账号执行此操作」，角色变更同样复用（ADR-109）
 import { generateInitialPassword, hashPassword } from "../lib/password";
 import { requireSuperAdmin } from "../middleware/adminAuth";
 
@@ -161,6 +162,8 @@ adminAccountsRouter.post("/admin/accounts/:accountId/role", async (req: Request,
     if (role !== "admin" && role !== "super_admin") {
       throw validationError([{ field: "role", reason: "TYPE" }]);
     }
+    // ADR-109：禁止对调用者自己改角色（升级/降级均拒）
+    if (accountId === req.authAccount!.id) throw cannotDisableSelf();
     const target = await findAccountById(accountId);
     if (!target) throw accountNotFound();
     if (target.role === role) {

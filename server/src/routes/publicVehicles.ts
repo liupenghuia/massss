@@ -51,9 +51,10 @@ function parseOptionalNumber(raw: unknown, field: string, opts: { integer?: bool
 }
 
 function toSummary(row: PublicListRow): PublicVehicleSummary {
+  // price_amount 库内为分（ADR-074），公开接口输出元
   const currentPrice: PriceValue =
     row.price_type === "amount"
-      ? { type: "amount", amount: Number(row.price_amount) }
+      ? { type: "amount", amount: Number(row.price_amount) / 100 }
       : { type: "negotiable", amount: null };
   return {
     ...toPublicVehicle(row),
