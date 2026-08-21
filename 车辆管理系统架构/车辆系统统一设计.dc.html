@@ -136,12 +136,11 @@
               <input class="input" placeholder="品牌 / 车型" style="border-radius: 999px; flex: 1;">
               <button type="button" class="btn btn-primary" style="border-radius: 999px;">筛选</button>
             </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <span class="tag tag-accent">10–20 万 ✕</span>
-              <span class="tag tag-outline">价格</span>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <span class="tag" style="background: var(--color-accent); color: var(--color-neutral-100);">100000–200000 元 ✕</span>
               <span class="tag tag-outline">上牌年</span>
               <span class="tag tag-outline">里程</span>
-              <span style="font-size: 13px; color: var(--color-neutral-600); align-self: center;">清空</span>
+              <button type="button" class="btn btn-ghost" style="border-radius: 999px; padding: 6px 14px; font-size: 13px;">清空</button>
             </div>
           </div>
           <div style="padding: 20px 22px 26px; display: flex; flex-direction: column; gap: 16px;">
@@ -219,6 +218,63 @@
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">详情 · 纯电变体（电耗 / 电池）</div>
+        <div style="width: 390px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden;">
+          <div style="height: 250px; background: var(--color-neutral-300); display: flex; align-items: flex-end; padding: 16px;">
+            <span style="background: var(--color-bg); border-radius: 999px; padding: 6px 14px; font-size: 13px;">1 / 12</span>
+          </div>
+          <div style="padding: 22px; display: flex; flex-direction: column; gap: 18px;">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <h1 style="font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 28px; margin: 0; line-height: 1.15;">比亚迪 汉 EV</h1>
+              <div style="font-family: var(--font-heading); font-size: 26px; color: var(--color-accent-700);">面议</div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 16px; font-size: 14px;">
+              <div><div style="font-size: 12px; color: var(--color-neutral-600);">上牌年</div>2022 年</div>
+              <div><div style="font-size: 12px; color: var(--color-neutral-600);">里程</div>18,900 公里</div>
+              <div><div style="font-size: 12px; color: var(--color-neutral-600);">颜色</div>珍珠白</div>
+              <div><div style="font-size: 12px; color: var(--color-neutral-600);">过户次数</div>0 次</div>
+              <div><div style="font-size: 12px; color: var(--color-neutral-600);">能源</div>纯电</div>
+              <div><div style="font-size: 12px; color: var(--color-neutral-600);">电耗</div>13.8</div>
+              <div><div style="font-size: 12px; color: var(--color-neutral-600);">电池</div>76.9 kWh</div>
+            </div>
+            <p style="font-size: 15px; line-height: 1.7; margin: 0; color: var(--color-neutral-800); text-wrap: pretty;">一手车，全程 4S 保养记录；电池健康度检测 96%，无泡水无事故。</p>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-family: var(--font-heading); font-size: 18px;">评估报告</div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <a href="#1b" style="display: flex; align-items: center; justify-content: space-between; background: var(--color-accent-2-200); border-radius: var(--radius-md); padding: 14px 16px; font-size: 14px; color: var(--color-accent-2-800);"><span>第三方检测报告.pdf</span><span style="font-size: 12px;">2026-07-14</span></a>
+                <a href="#1b" style="display: flex; align-items: center; justify-content: space-between; background: var(--color-accent-2-200); border-radius: var(--radius-md); padding: 14px 16px; font-size: 14px; color: var(--color-accent-2-800);"><span>电池健康报告.pdf</span><span style="font-size: 12px;">2026-07-14</span></a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">加载骨架 · 找不到车辆</div>
+        <div style="width: 300px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden;">
+          <div style="height: 176px; background: var(--color-neutral-300);"></div>
+          <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="height: 26px; width: 60%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+            <div style="height: 22px; width: 38%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+              <div style="height: 34px; background: var(--color-neutral-300); border-radius: var(--radius-sm);"></div>
+              <div style="height: 34px; background: var(--color-neutral-300); border-radius: var(--radius-sm);"></div>
+              <div style="height: 34px; background: var(--color-neutral-300); border-radius: var(--radius-sm);"></div>
+              <div style="height: 34px; background: var(--color-neutral-300); border-radius: var(--radius-sm);"></div>
+            </div>
+            <div style="height: 14px; background: var(--color-neutral-300); border-radius: 999px;"></div>
+            <div style="height: 14px; width: 72%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+          </div>
+        </div>
+        <div style="width: 300px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 40px 26px; display: flex; flex-direction: column; gap: 14px; align-items: center; text-align: center;">
+          <div style="width: 72px; height: 72px; border-radius: 999px; background: var(--color-accent-2-200);"></div>
+          <div style="font-family: var(--font-heading); font-size: 20px;">找不到该车辆</div>
+          <p style="font-size: 14px; color: var(--color-neutral-700); margin: 0;">它可能已经售出或下架了。</p>
+          <button type="button" class="btn btn-primary" style="border-radius: 999px;">回到在售列表</button>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
         <div style="font-size: 13px; color: var(--color-neutral-600);">空态 · 灯箱</div>
         <div style="width: 300px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 44px 26px; display: flex; flex-direction: column; gap: 14px; align-items: center; text-align: center;">
           <div style="width: 84px; height: 84px; border-radius: 999px; background: var(--color-accent-200);"></div>
@@ -292,7 +348,7 @@
             <div style="display: flex; align-items: center; gap: 28px;">
               <span style="font-family: var(--font-heading); font-size: 19px;">车行 · 管理后台</span>
               <div style="display: flex; gap: 8px;">
-                <span class="tag tag-accent" style="padding: 8px 18px;">车辆</span>
+                <span class="tag" style="padding: 8px 18px; background: var(--color-accent); color: var(--color-neutral-100);">车辆</span>
                 <span class="tag tag-outline" style="padding: 8px 18px;">回收站</span>
                 <span class="tag tag-outline" style="padding: 8px 18px;">账号</span>
               </div>
@@ -618,6 +674,364 @@
             </table>
           </div>
         </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="1d" style="display: flex; flex-direction: column; gap: 24px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span style="font-family: var(--font-heading); font-size: 15px; background: var(--color-accent); color: var(--color-neutral-100); padding: 4px 14px; border-radius: 999px;">1d</span>
+      <h2 style="font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 30px; margin: 0;">状态与模式 — 两端共用</h2>
+    </div>
+    <p style="font-size: 16px; line-height: 1.6; color: var(--color-neutral-700); margin: -8px 0 0; max-width: 720px;">对话框、校验、提示条、权限、空态、加载。这些是最容易各写一套的部分，统一在这里定。</p>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start;">
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">确认对话框 · 破坏性</div>
+        <div style="width: 460px; background: var(--color-neutral-900); border-radius: var(--radius-lg); padding: 40px 32px; display: flex; align-items: center; justify-content: center;">
+          <div class="dialog" style="background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 26px 28px; width: 100%; display: flex; flex-direction: column; gap: 14px;">
+            <div class="dialog-title" style="font-family: var(--font-heading); font-size: 22px;">把这辆车放进回收站？</div>
+            <div class="dialog-body" style="font-size: 15px; line-height: 1.6; color: var(--color-neutral-800);">#12 领克 03+ 将从前台下架，保留 1 个月后自动清除。期间可在回收站恢复为草稿。</div>
+            <div class="dialog-actions" style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 6px;">
+              <button type="button" class="btn btn-ghost" style="border-radius: 999px;">取消</button>
+              <button type="button" class="btn btn-primary" style="border-radius: 999px;">放进回收站</button>
+            </div>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-600);">确认对话框 · 带一次性结果</div>
+        <div style="width: 460px; background: var(--color-neutral-900); border-radius: var(--radius-lg); padding: 40px 32px; display: flex; align-items: center; justify-content: center;">
+          <div class="dialog" style="background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 26px 28px; width: 100%; display: flex; flex-direction: column; gap: 14px;">
+            <div class="dialog-title" style="font-family: var(--font-heading); font-size: 22px;">已重置 li 的密码</div>
+            <div class="dialog-body" style="display: flex; flex-direction: column; gap: 10px;">
+              <span style="font-size: 15px; line-height: 1.6; color: var(--color-neutral-800);">把口令交给对方，他下次登录必须改密。此口令只显示一次。</span>
+              <div style="background: var(--color-accent-200); border-radius: var(--radius-md); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <code style="font-size: 17px; color: var(--color-accent-900);">7fQ2-xk9L-a4Rm</code>
+                <button type="button" class="btn btn-secondary" style="border-radius: 999px; padding: 6px 14px; font-size: 13px;">复制</button>
+              </div>
+            </div>
+            <div class="dialog-actions" style="display: flex; justify-content: flex-end; gap: 10px; padding-top: 6px;">
+              <button type="button" class="btn btn-primary" style="border-radius: 999px;">我已保存</button>
+            </div>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 460px; line-height: 1.6;">进回收站、停用账号、重置密码、恢复为草稿都走这一个壳：标题是问句，正文写清后果与可逆性，主按钮复述动作而不是「确定」。</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">提示条 · banner 四种</div>
+        <div style="width: 440px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="background: var(--color-accent-2-200); border-radius: var(--radius-md); padding: 14px 18px; font-size: 14px; color: var(--color-accent-2-800);">已发布。前台链接可复制了。</div>
+          <div style="background: var(--color-accent-200); border-radius: var(--radius-md); padding: 14px 18px; font-size: 14px; color: var(--color-accent-800); display: flex; align-items: center; justify-content: space-between; gap: 12px;"><span>加载失败，请重试</span><button type="button" class="btn btn-secondary" style="border-radius: 999px; padding: 6px 16px; font-size: 13px;">重试</button></div>
+          <div style="background: var(--color-accent-200); border-radius: var(--radius-md); padding: 14px 18px; font-size: 14px; color: var(--color-accent-900);">不能上架：车辆图片至少 4 张，当前 2 张。</div>
+          <div style="background: var(--color-neutral-200); border-radius: var(--radius-md); padding: 14px 18px; font-size: 14px; color: var(--color-neutral-800);">草稿已保存 · 14:02</div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 440px; line-height: 1.6;">沙绿 = 成功，赤陶 = 需要注意或失败，中性 = 纯信息。提示条贴在触发它的区块上方，不飘在屏幕角落；带动作的提示自己带按钮。</div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">表单校验错误态</div>
+        <div style="width: 440px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 13px; color: var(--color-neutral-700);">上牌年</span>
+            <input class="input" value="1899" style="border-radius: 999px; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-200);">
+            <span style="font-size: 13px; color: var(--color-accent-800);">请填 1980 至今年之间的年份</span>
+          </label>
+          <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 13px; color: var(--color-neutral-700);">里程（公里）</span>
+            <input class="input" value="32400" style="border-radius: 999px;">
+          </label>
+          <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 13px; color: var(--color-neutral-700);">新密码</span>
+            <input class="input" type="password" value="·····" style="border-radius: 999px; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-200);">
+            <span style="font-size: 13px; color: var(--color-accent-800);">至少 8 位，需含字母和数字</span>
+          </label>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-primary" style="border-radius: 999px;" disabled="disabled">保存中…</button>
+            <button type="button" class="btn btn-ghost" style="border-radius: 999px;">取消</button>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 440px; line-height: 1.6;">错误只标在出错字段上：赤陶描边 + 三像素柔光环 + 字段下一行说明，不用红色，也不弹窗。提交中主按钮换文案并禁用（内建 45% 不透明度）。</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">权限差异 · 普通管理员顶栏</div>
+        <div style="width: 560px; background: var(--color-neutral-100); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 20px 26px; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+          <div style="display: flex; align-items: center; gap: 22px;">
+            <span style="font-family: var(--font-heading); font-size: 17px;">车行 · 管理后台</span>
+            <div style="display: flex; gap: 8px;">
+              <span class="tag" style="padding: 8px 18px; background: var(--color-accent); color: var(--color-neutral-100);">车辆</span>
+              <span class="tag tag-outline" style="padding: 8px 18px;">回收站</span>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 14px; font-size: 14px;">
+            <span style="color: var(--color-neutral-700);">li（管理员）</span>
+            <button type="button" class="btn btn-ghost" style="border-radius: 999px;">退出</button>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 560px; line-height: 1.6;">「账号」整个不出现，不做灰置。管理员仍能在自己的资料里改密，所以改密表单从账号页拆出来单独存在。</div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">修改自己的密码（两种角色都有）</div>
+        <div style="width: 380px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+          <span style="font-family: var(--font-heading); font-size: 19px;">修改自己的密码</span>
+          <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 13px; color: var(--color-neutral-700);">当前密码</span>
+            <input class="input" type="password" value="········" style="border-radius: 999px;">
+          </label>
+          <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 13px; color: var(--color-neutral-700);">新密码</span>
+            <input class="input" type="password" value="············" style="border-radius: 999px;">
+          </label>
+          <button type="button" class="btn btn-secondary" style="border-radius: 999px; align-self: flex-start;">改密</button>
+          <span style="font-size: 13px; color: var(--color-neutral-600);">改完会退出登录，需重新登录</span>
+        </div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">会话过期 · 回到登录页</div>
+        <div style="width: 380px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="background: var(--color-neutral-200); border-radius: var(--radius-md); padding: 14px 18px; font-size: 14px; color: var(--color-neutral-800);">密码已修改，请重新登录</div>
+          <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 13px; color: var(--color-neutral-700);">登录名</span>
+            <input class="input" value="li" style="border-radius: 999px;">
+          </label>
+          <label class="field" style="display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-size: 13px; color: var(--color-neutral-700);">密码</span>
+            <input class="input" type="password" style="border-radius: 999px;">
+          </label>
+          <button type="button" class="btn btn-primary btn-block" style="border-radius: 999px;">登录</button>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 380px; line-height: 1.6;">会话失效、被停用、改密后统统落到登录页，用中性提示条说明原因，不是空白页也不是弹窗。</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">后台空态 · 一辆车都没有</div>
+        <div style="width: 620px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 56px 32px; display: flex; flex-direction: column; gap: 14px; align-items: center; text-align: center;">
+          <div style="width: 92px; height: 92px; border-radius: 999px; background: var(--color-accent-2-200);"></div>
+          <div style="font-family: var(--font-heading); font-size: 22px;">还没有车辆</div>
+          <p style="font-size: 15px; color: var(--color-neutral-700); margin: 0; max-width: 340px; line-height: 1.6;">新建一辆车，填好信息、上传至少 4 张图，就能发布到前台。</p>
+          <button type="button" class="btn btn-primary" style="border-radius: 999px;">新建车辆</button>
+        </div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">后台列表加载骨架</div>
+        <div style="width: 620px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+          <div style="background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden;">
+            <div style="height: 110px; background: var(--color-neutral-300);"></div>
+            <div style="padding: 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="height: 16px; width: 70%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+              <div style="height: 12px; width: 50%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+            </div>
+          </div>
+          <div style="background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden;">
+            <div style="height: 110px; background: var(--color-neutral-300);"></div>
+            <div style="padding: 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="height: 16px; width: 60%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+              <div style="height: 12px; width: 44%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+            </div>
+          </div>
+          <div style="background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden;">
+            <div style="height: 110px; background: var(--color-neutral-300);"></div>
+            <div style="padding: 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="height: 16px; width: 76%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+              <div style="height: 12px; width: 40%; background: var(--color-neutral-300); border-radius: 999px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">图片占位 · 无图 / 加载失败</div>
+        <div style="width: 620px; display: flex; gap: 16px; flex-wrap: wrap;">
+          <div style="width: 190px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="aspect-ratio: 4/3; background: var(--color-neutral-300); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--color-neutral-700);">暂无图片</div>
+            <span style="font-size: 12px; color: var(--color-neutral-600);">车辆无封面图时的卡片占位</span>
+          </div>
+          <div style="width: 190px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="aspect-ratio: 4/3; background: var(--color-neutral-300); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--color-neutral-700); text-align: center; padding: 12px;">领克 03+</div>
+            <span style="font-size: 12px; color: var(--color-neutral-600);">图片加载失败时退回车名文字，不显示破图</span>
+          </div>
+          <div style="width: 190px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="aspect-ratio: 4/3; background: var(--color-neutral-300); border-radius: var(--radius-md);"></div>
+            <span style="font-size: 12px; color: var(--color-neutral-600);">懒加载中：同一灰块，无骨架闪烁</span>
+          </div>
+        </div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">前台标签用法</div>
+        <div style="width: 620px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+            <span class="tag" style="background: var(--color-accent); color: var(--color-neutral-100);">已应用的筛选 ✕</span>
+            <span class="tag tag-outline">未应用的筛选</span>
+            <span class="tag tag-accent-2">纯电</span>
+            <span class="tag tag-neutral">0 次过户</span>
+          </div>
+          <div style="font-size: 13px; color: var(--color-neutral-700); line-height: 1.6;">前台不显示上架状态 — 访客看到的都是已上架。标签只用于筛选态和车辆自身的卖点（能源类型、零过户），一张卡片最多两个。</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="1e" style="display: flex; flex-direction: column; gap: 24px;">
+    <div style="display: flex; align-items: baseline; gap: 14px;">
+      <span style="font-family: var(--font-heading); font-size: 15px; background: var(--color-accent); color: var(--color-neutral-100); padding: 4px 14px; border-radius: 999px;">1e</span>
+      <h2 style="font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 30px; margin: 0;">补齐：筛选、分页、图片操作、宽屏、极端数据</h2>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start;">
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">筛选面板 · 一次只开一个</div>
+        <div style="width: 390px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 22px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input class="input" placeholder="品牌 / 车型" style="border-radius: 999px; flex: 1;">
+            <button type="button" class="btn btn-primary" style="border-radius: 999px;">筛选</button>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button type="button" class="tag" style="background: var(--color-accent); color: var(--color-neutral-100); border: 0;">价格</button>
+            <span class="tag tag-outline">上牌年</span>
+            <span class="tag tag-outline">里程</span>
+            <button type="button" class="btn btn-ghost" style="border-radius: 999px; padding: 6px 14px; font-size: 13px;">清空</button>
+          </div>
+          <div style="display: flex; gap: 10px; padding-top: 4px;">
+            <input class="input" placeholder="最低价（元）" style="border-radius: 999px; flex: 1;">
+            <input class="input" placeholder="最高价（元）" style="border-radius: 999px; flex: 1;">
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 390px; line-height: 1.6;">三个维度共用一个展开区，点开的那个 chip 变实心。一旦填了值，chip 就换成带 ✕ 的已应用态并顶掉原按钮 — 所以同一维度不会同时出现按钮和 chip。</div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">已应用两个维度</div>
+        <div style="width: 390px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 22px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input class="input" value="领克" style="border-radius: 999px; flex: 1;">
+            <button type="button" class="btn btn-primary" style="border-radius: 999px;">筛选</button>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <span class="tag" style="background: var(--color-accent); color: var(--color-neutral-100);">100000–200000 元 ✕</span>
+            <span class="tag" style="background: var(--color-accent); color: var(--color-neutral-100);">2019–? 年 ✕</span>
+            <span class="tag tag-outline">里程</span>
+            <button type="button" class="btn btn-ghost" style="border-radius: 999px; padding: 6px 14px; font-size: 13px;">清空</button>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 390px; line-height: 1.6;">只填一头时另一头显示「?」，照代码里的写法。</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">图片项悬停操作</div>
+        <div style="width: 460px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="aspect-ratio: 4/3; background: var(--color-neutral-300); border-radius: var(--radius-md); position: relative;">
+              <span style="position: absolute; top: 6px; left: 6px; background: var(--color-accent); color: var(--color-neutral-100); font-size: 11px; padding: 3px 10px; border-radius: 999px;">封面</span>
+            </div>
+            <input class="input" value="正面 45°" style="border-radius: 999px; font-size: 12px; padding: 6px 12px;">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="aspect-ratio: 4/3; border-radius: var(--radius-md); position: relative; background: var(--color-neutral-800); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;">
+              <button type="button" class="btn btn-secondary" style="border-radius: 999px; padding: 5px 14px; font-size: 12px;">设为封面</button>
+              <button type="button" class="btn btn-ghost" style="border-radius: 999px; padding: 5px 14px; font-size: 12px; color: var(--color-neutral-200);">删除</button>
+              <span style="font-size: 11px; color: var(--color-neutral-400);">按住可拖动排序</span>
+            </div>
+            <input class="input" value="内饰" style="border-radius: 999px; font-size: 12px; padding: 6px 12px;">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="aspect-ratio: 4/3; background: var(--color-neutral-300); border-radius: var(--radius-md);"></div>
+            <input class="input" placeholder="图片说明" style="border-radius: 999px; font-size: 12px; padding: 6px 12px;">
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 460px; line-height: 1.6;">悬停时整张图压暗，操作叠在图上，不额外占位。删除走确认对话框；「设为封面」即把该图排到第一位。说明框常驻可见，因为它是内容不是操作。</div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">后台列表分页</div>
+        <div style="width: 460px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+          <span style="font-size: 14px; color: var(--color-neutral-700);">第 21–40 辆，共 36 辆</span>
+          <div style="display: flex; align-items: center; gap: 12px; font-size: 14px;">
+            <button type="button" class="btn btn-ghost" style="border-radius: 999px;">上一页</button>
+            <span style="color: var(--color-neutral-700);">2 / 2</span>
+            <button type="button" class="btn btn-secondary" style="border-radius: 999px;" disabled="disabled">下一页</button>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 460px; line-height: 1.6;">和前台同一个分页组件，只是后台左侧多一行计数。到边界时按钮禁用而非隐藏。</div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">键盘焦点环</div>
+        <div style="width: 460px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 24px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+          <button type="button" class="btn btn-primary" style="border-radius: 999px; outline: 2px solid var(--color-accent); outline-offset: 2px;">发布</button>
+          <input class="input" value="领克" style="border-radius: 999px; width: 130px; outline: 2px solid var(--color-accent); outline-offset: 2px;">
+          <span class="tag tag-outline" style="outline: 2px solid var(--color-accent); outline-offset: 2px;">里程</span>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 460px; line-height: 1.6;">设计系统内建的 2px 赤陶环，偏移 2px，绝不留浏览器默认蓝框。灯箱里 Esc 关闭、左右方向键翻页。</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">灯箱 · 带说明与键盘提示</div>
+        <div style="width: 420px; background: var(--color-neutral-900); border-radius: var(--radius-lg); padding: 22px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="height: 250px; background: var(--color-neutral-700); border-radius: var(--radius-md);"></div>
+          <p style="margin: 0; font-size: 14px; color: var(--color-neutral-200); line-height: 1.6;">前排座椅，无破损</p>
+          <div style="display: flex; align-items: center; justify-content: space-between; color: var(--color-neutral-200); font-size: 14px;">
+            <button type="button" class="btn btn-ghost" style="border-radius: 999px; color: var(--color-neutral-200);">上一张</button>
+            <span>3 / 8</span>
+            <button type="button" class="btn btn-ghost" style="border-radius: 999px; color: var(--color-neutral-200);">下一张</button>
+          </div>
+          <span style="font-size: 12px; color: var(--color-neutral-500); text-align: center;">← → 翻页 · Esc 关闭 · 手机左右滑动</span>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 420px; line-height: 1.6;">点背景任意处关闭，点图片本身不关闭。说明放在图下、导航之上。</div>
+
+        <div style="font-size: 13px; color: var(--color-neutral-600); margin-top: 10px;">极端数据</div>
+        <div style="width: 420px; display: flex; flex-direction: column; gap: 14px;">
+          <div class="card elev-sm" style="border-radius: var(--radius-lg); overflow: hidden; padding: 0;">
+            <div style="height: 130px; background: var(--color-neutral-300);"></div>
+            <div style="padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-family: var(--font-heading); font-size: 19px; line-height: 1.2; text-wrap: pretty;">梅赛德斯-奔驰 GLE 350 4MATIC 豪华型</div>
+              <div style="font-size: 13px; color: var(--color-neutral-700);">2016 · 248,600 km · 曜岩黑金属漆</div>
+              <div style="font-family: var(--font-heading); font-size: 21px; color: var(--color-accent-700);">28.60 万</div>
+            </div>
+          </div>
+          <div style="background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 20px 22px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: baseline; justify-content: space-between;">
+              <span style="font-family: var(--font-heading); font-size: 18px;">价格记录</span>
+              <span style="font-size: 12px; color: var(--color-neutral-600);">共 23 条</span>
+            </div>
+            <div style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 9px; font-size: 14px; padding-right: 6px;">
+              <div style="display: flex; justify-content: space-between;"><span>28.60 万</span><span style="color: var(--color-neutral-600);">2026-08-18</span></div>
+              <div style="display: flex; justify-content: space-between;"><span>29.20 万</span><span style="color: var(--color-neutral-600);">2026-08-11</span></div>
+              <div style="display: flex; justify-content: space-between;"><span>29.80 万</span><span style="color: var(--color-neutral-600);">2026-08-04</span></div>
+              <div style="display: flex; justify-content: space-between;"><span>30.50 万</span><span style="color: var(--color-neutral-600);">2026-07-28</span></div>
+              <div style="display: flex; justify-content: space-between;"><span>31.00 万</span><span style="color: var(--color-neutral-600);">2026-07-21</span></div>
+              <div style="display: flex; justify-content: space-between;"><span>面议</span><span style="color: var(--color-neutral-600);">2026-07-14</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 420px; line-height: 1.6;">长车名换行不截断（`text-wrap: pretty`），六位里程照常显示千分位，价格记录超过 6 条内部滚动并在标题旁给总数。</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-size: 13px; color: var(--color-neutral-600);">前台宽屏 · 居中窄栏，不铺满</div>
+        <div style="width: 900px; background: var(--color-neutral-200); border-radius: var(--radius-lg); padding: 28px 0; display: flex; justify-content: center;">
+          <div style="width: 480px; background: var(--color-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); overflow: hidden;">
+            <div style="padding: 24px 26px 0; display: flex; flex-direction: column; gap: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-family: var(--font-heading); font-size: 18px;">车行</span>
+                <span style="font-size: 13px; color: var(--color-neutral-600);">共 36 辆</span>
+              </div>
+              <h1 style="font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 34px; margin: 0; line-height: 1.1;">在售车辆</h1>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input class="input" placeholder="品牌 / 车型" style="border-radius: 999px; flex: 1;">
+                <button type="button" class="btn btn-primary" style="border-radius: 999px;">筛选</button>
+              </div>
+            </div>
+            <div style="padding: 20px 26px 28px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+              <div class="card elev-sm" style="border-radius: var(--radius-lg); overflow: hidden; padding: 0;">
+                <div style="height: 120px; background: var(--color-neutral-300);"></div>
+                <div style="padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 5px;">
+                  <div style="font-family: var(--font-heading); font-size: 17px;">领克 03+</div>
+                  <div style="font-size: 12px; color: var(--color-neutral-700);">2021 · 32,400 km</div>
+                  <div style="font-family: var(--font-heading); font-size: 18px; color: var(--color-accent-700);">14.80 万</div>
+                </div>
+              </div>
+              <div class="card elev-sm" style="border-radius: var(--radius-lg); overflow: hidden; padding: 0;">
+                <div style="height: 120px; background: var(--color-neutral-300);"></div>
+                <div style="padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 5px;">
+                  <div style="font-family: var(--font-heading); font-size: 17px;">比亚迪 汉 EV</div>
+                  <div style="font-size: 12px; color: var(--color-neutral-700);">2022 · 18,900 km</div>
+                  <div style="font-family: var(--font-heading); font-size: 18px; color: var(--color-accent-700);">面议</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size: 13px; color: var(--color-neutral-700); max-width: 900px; line-height: 1.6;">宽屏不改成大网格，只把窄栏放宽到 480 并让卡片两列 — 前台是手机为主，桌面访客看到的是同一份内容而不是另一套布局。详情页宽屏同理：栏宽变、结构不变。</div>
       </div>
 
     </div>
