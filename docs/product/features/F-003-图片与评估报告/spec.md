@@ -2,10 +2,10 @@
 id: F-003
 title: 图片与评估报告
 status: implementing
-version: 1.1
+version: 1.3
 owners: []
-contracts: [adminPresignVehicleImage, adminConfirmVehicleImage, adminPatchVehicleImageCaption, adminReorderVehicleImages, adminDeleteVehicleImage, adminListVehicleImages, adminPresignVehicleReport, adminConfirmVehicleReport, adminDeleteVehicleReport, adminListVehicleReports, publicListVehicleImages, publicListVehicleReports, PUBLISHED_IMAGE_MIN, countImages]
-adrs: [ADR-008, ADR-009, ADR-010, ADR-011]
+contracts: [adminPresignVehicleImage, adminConfirmVehicleImage, adminPatchVehicleImageCaption, adminReorderVehicleImages, adminDeleteVehicleImage, adminListVehicleImages, adminPresignVehicleReport, adminConfirmVehicleReport, adminDeleteVehicleReport, adminListVehicleReports, publicListVehicleImages, publicListVehicleReports, PUBLISHED_IMAGE_MIN, countImages, INVALID_OBJECT_KEY, IMAGE_ORDER_MISMATCH]
+adrs: [ADR-008, ADR-009, ADR-010, ADR-011, ADR-056, ADR-057, ADR-058, ADR-059]
 rfcs: []
 ---
 
@@ -25,21 +25,35 @@ rfcs: []
 
 见 ADR-008、ADR-010。
 
-- 图片说明为 1:1（一图一段文字），"无上限"指图片数量无上限
+- 图片说明为 1:1（一图一段文字），"无上限"指图片数量无上限；说明文案长度上限 200 字符，
+  允许为空字符串，超出长度返回 VALIDATION_ERROR（ADR-057）
 - 图片/评估报告支持删除（需二次确认）、支持"新增+删除"方式替换，不做原地覆盖
-- 评估报告允许一辆车挂多份，按上传时间倒序展示，一份报告对应一个文件
-- 已上架车辆删除图片导致数量 < 4 张时，服务端拒绝该次删除
+- 评估报告允许一辆车挂多份，按上传时间倒序展示，一份报告对应一个文件；不新增"评估机构/报告类型"
+  等区分字段，靠上传时间和文件名区分（ADR-057）
+- 已上架车辆删除图片导致数量 < 4 张时，服务端拒绝该次删除（PUBLISHED_IMAGE_MIN）；
+  前端不做提前禁用/预判提示，统一依赖服务端拒绝后在弹窗内展示原因（ADR-057）
 - 车辆下架时图片/报告不做任何联动处理，管理后台随时可编辑
 - 评估报告"直接展示" = 新标签页打开原文件
 - 图片上传要求车辆已存在（含草稿态），用 F-001 技术主键关联
-- 支持批量拖拽多文件上传，带进度反馈，部分失败不影响其余
+- 支持批量拖拽多文件上传，带进度反馈，部分失败不影响其余；服务端仍逐文件独立调用
+  （不做批量事务打包），前端聚合每次调用结果按文件展示成功/失败与失败原因，
+  不做单文件自动重试，失败文件需管理员手动重新上传（ADR-058）
+- `adminReorderVehicleImages` 传入的图片 ID 列表与该车实际图片集合不一致（缺失/多余/重复）时，
+  服务端拒绝整个请求，返回 IMAGE_ORDER_MISMATCH（沿用 contracts/errors.yaml 既有定义，非新决策）
+- 拖拽排序完成后自动保存，不需要显式点击"保存排序"按钮（ADR-057）
 - 不做并发排序冲突检测、不做打包下载
+- 单车图片数超 100 张仅写入操作日志告警，不做后台可见提示或运维通知（ADR-057）
+- 客户端直传成功但从未调用 confirm 产生的孤儿对象，本期不做任何清理，推迟到后续评估，
+  不阻塞本 feature（ADR-057）
+- 公开直链是否加防盗链/Referer 白名单：维持 ADR-009 现状，不做额外校验（非新决策）
 
 ## 服务端与存储
 
 见 ADR-009、ADR-011。
 
-- 客户端直传对象存储 + 预签名 URL，服务端只做元数据落库确认
+- 客户端直传对象存储 + 预签名 URL，服务端只做元数据落库确认；确认接口（adminConfirmVehicleImage /
+  adminConfirmVehicleReport）必须校验 objectKey 确实是该车辆此前预签名申请签发的、且未被
+  其他车辆确认请求使用过，校验失败返回 INVALID_OBJECT_KEY（ADR-056，防跨车串号）
 - 文件限制（工程默认值）：图片 jpg/png/webp、单张 ≤10MB；评估报告 PDF/PNG/jpeg、单份 ≤20MB；
   单车图片数超 100 张只告警不阻断
 - 访问链接为公开直链，车辆下架后链接不做失效处理，只保证 `/public/*` 接口不返回已下架数据
@@ -49,6 +63,9 @@ rfcs: []
 - 车辆删除后图片/报告文件本期不同步清理，留给 F-005 处理
 - 前台链接以微信内分享为主，同时支持纯 URL 分享；前台域名尚未 ICP 备案，
   正式上线前必须完成备案，这是部署阶段前置条件，非本 feature 开发范围
+- CDN/对象存储域名的微信安全策略自查，作为部署阶段前置条件由负责部署人员在域名最终确定后
+  自查一次并留痕，不列入本 feature 自动化验收清单（ADR-057，与上一条域名备案同一挂钩点）
+- 图片/评估报告列表本期不展示"上传人"字段，与操作日志"只落库不做查看页面"保持一致（ADR-057）
 
 ## 各端职责
 
@@ -57,8 +74,16 @@ rfcs: []
 - 本期不做打包下载、不做并发排序冲突检测（ADR-008）
 - 本期不清理已删除车辆的存储文件，留给 F-005（ADR-009）
 - 域名未备案是已知的上线阻塞项，需在部署阶段解决（ADR-011）
+- 已删除（回收站中，`trashedAt` 不为空）车辆的图片/报告，在 `/public/*` 与"已下架"车辆
+  同一口径过滤：车辆不可见时，挂在其下的图片/报告接口一律 404（ADR-059）
 
 ## 变更历史
 - v1.0 初版
 - v1.1 补充数据模型、交互规则、服务端与存储规则、下架联动、微信分享与部署前置条件，
   status 改为 agreed（ADR-008、ADR-009、ADR-010、ADR-011）
+- v1.2 第二轮五方评审收尾：确认接口防串号强绑定校验、批量上传逐文件响应契约，
+  以及一批实现细节默认值（孤儿文件不处理、报告不加区分字段、caption长度、
+  超100张告警渠道、删除下限前端不预判、域名安全自查责任、上传人字段不展示、
+  排序自动保存）；已删除车辆图片/报告可见性口径因触及零容忍项未裁决，待用户明示
+  （ADR-056、ADR-057、ADR-058）
+- v1.3 用户明示裁决：回收站车辆的图片/报告在 `/public/*` 与"已下架"同口径过滤（ADR-059）
