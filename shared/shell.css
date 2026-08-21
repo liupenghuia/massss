@@ -672,13 +672,24 @@ textarea.input {
   gap: 14px;
   padding: 20px;
   color: var(--color-neutral-200);
+  touch-action: pan-y;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  color: var(--color-neutral-100);
+  z-index: 1;
 }
 
 .lightbox img {
-  max-width: 80vw;
-  max-height: 70vh;
+  max-width: min(92vw, 960px);
+  max-height: min(70vh, 720px);
   object-fit: contain;
   border-radius: var(--radius-md);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .pager {

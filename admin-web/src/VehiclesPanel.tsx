@@ -1,108 +1,18 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api, ApiRequestError } from "./api";
-
-type EnergyType = "gasoline" | "ev" | "phev" | "range_extender";
-type Status = "draft" | "published" | "unpublished";
-
-type AdminVehicle = {
-  id: number;
-  status: Status;
-  version: number;
-  brand: string;
-  model: string;
-  registrationYear: number;
-  mileageKm: number;
-  color: string;
-  conditionDesc: string;
-  energyType: EnergyType;
-  transferCount: number;
-  displacementL: number | null;
-  energyConsumption: number | null;
-  batteryKwh: number | null;
-  vinMasked: string | null;
-};
-
-type PriceValue = { type: "amount"; amount: number } | { type: "negotiable"; amount: null };
-type ImageItem = { id: number; url: string; caption: string };
-type ReportItem = { id: number; url: string; contentType: string; byteSize: number };
-/** operatorId：契约字段名；服务端按 ADR-076 填登录账号名 */
-type PriceRecordItem = { id: number; from: PriceValue | { type: "unset"; amount: null }; to: PriceValue; createdAt: string; operatorId?: string };
-/** ADR-058：批量上传按文件展示成功/失败与失败原因 */
-type UploadTask = { id: number; name: string; status: "uploading" | "done" | "failed"; reason?: string };
-
-const emptyForm = {
-  brand: "",
-  model: "",
-  registrationYear: 2020,
-  mileageKm: 0,
-  color: "",
-  conditionDesc: "",
-  energyType: "gasoline" as EnergyType,
-  transferCount: 0,
-  displacementL: "1.5",
-  energyConsumption: "",
-  batteryKwh: "",
-  vin: "",
-  initialPriceType: "amount" as "amount" | "negotiable",
-  initialAmount: "1.00",
-};
-
-const CORE_FIELD_LABEL: Record<string, string> = {
-  brand: "品牌",
-  model: "车型",
-  registrationYear: "上牌年",
-  mileageKm: "里程",
-  color: "颜色",
-  conditionDesc: "车辆描述",
-  energyType: "能源类型",
-  transferCount: "过户次数",
-};
-
-// PUBLISH_PRECONDITION_FAILED 的 missing 可能含 images/price/coreFields，
-// coreFields 时 details.missingCoreFields 列出具体缺失字段名（ADR-035）。
-function describeError(err: unknown, fallback: string): string {
-  if (err instanceof ApiRequestError && err.code === "PUBLISH_PRECONDITION_FAILED") {
-    const missingCoreFields = err.details.missingCoreFields;
-    if (Array.isArray(missingCoreFields) && missingCoreFields.length > 0) {
-      const labels = missingCoreFields.map((f) => CORE_FIELD_LABEL[String(f)] ?? String(f)).join("、");
-      return `${err.message}：核心字段缺失（${labels}）`;
-    }
-  }
-  return err instanceof Error ? err.message : fallback;
-}
-
-const STATUS_LABEL: Record<Status, string> = {
-  draft: "草稿",
-  published: "已上架",
-  unpublished: "已下架",
-};
-
-function statusTag(status: Status): string {
-  if (status === "published") return "tag tag-accent-2";
-  if (status === "draft") return "tag tag-neutral";
-  return "tag tag-outline";
-}
-
-function brandMono(brand: string): string {
-  const t = brand.trim();
-  if (!t) return "车";
-  return t.slice(0, 1);
-}
-
-function formatPrice(p: PriceValue | null | { type: string; amount: number | null }): string {
-  if (!p) return "未填";
-  if (p.type === "negotiable" || p.type === "unset" || p.amount == null) return "面议";
-  return `${(p.amount / 10000).toFixed(2)} 万`;
-}
-
-function ThumbPreview({ src, alt }: { src: string; alt: string }) {
-  const [ok, setOk] = useState(true);
-  useEffect(() => {
-    setOk(true);
-  }, [src]);
-  if (!ok) return <span className="thumb-fallback">无法预览</span>;
-  return <img src={src} alt={alt} onError={() => setOk(false)} />;
-}
+import { api } from "./api";
+import { describeError } from "./vehicles/helpers";
+import { VehicleFormView } from "./vehicles/VehicleFormView";
+import { VehicleListView } from "./vehicles/VehicleListView";
+import {
+  emptyForm,
+  type AdminVehicle,
+  type ImageItem,
+  type PriceRecordItem,
+  type PriceValue,
+  type ReportItem,
+  type Status,
+  type UploadTask,
+} from "./vehicles/types";
 
 export function VehiclesPanel() {
   const [view, setView] = useState<"list" | "form">("list");
@@ -129,7 +39,6 @@ export function VehiclesPanel() {
   const [formBusy, setFormBusy] = useState(false);
   const [covers, setCovers] = useState<Record<number, string>>({});
 
-  // ADR-041：不写死默认前台域名；缺失时提示配置，禁止拼出空前缀错误链接
   const publicOrigin = (import.meta.env.VITE_PUBLIC_WEB_ORIGIN as string | undefined)?.trim() || "";
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -147,7 +56,6 @@ export function VehiclesPanel() {
       setItems(data.items);
       setTotal(data.total);
       setPage(nextPage);
-      // 列表卡片封面：按首图填充（失败不阻断列表）
       void Promise.all(
         data.items.map(async (v) => {
           try {
@@ -171,8 +79,6 @@ export function VehiclesPanel() {
   async function create(e: FormEvent) {
     e.preventDefault();
     setError("");
-    // ADR-035：核心字段允许缺失以保存为草稿，缺失时不传该字段（而不是传空字符串/0），
-    // 由服务端在发布时才校验是否齐全。
     const body: Record<string, unknown> = {
       brand: form.brand || undefined,
       model: form.model || undefined,
@@ -281,7 +187,6 @@ export function VehiclesPanel() {
         body: JSON.stringify({ version: vehicle.version }),
       });
       if (path === "trash") {
-        // ADR-090：幂等重复删除不刷新保留期，给非阻断提示
         if (updated.version === vehicle.version) {
           setInfo("该车辆已在回收站中，保留期不变");
         }
@@ -347,6 +252,7 @@ export function VehiclesPanel() {
     }
     const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${selected.id}/images`);
     setImages(imgs.items);
+    if (imgs.items[0]?.url) setCovers((prev) => ({ ...prev, [selected.id]: imgs.items[0]!.url }));
   }
 
   async function uploadReports(files: File[]) {
@@ -458,694 +364,72 @@ export function VehiclesPanel() {
   }
 
   if (view === "form") {
-    const editing = selected;
-    const energy = editing ? editing.energyType : form.energyType;
     return (
-      <div>
-        {error ? (
-          <p className="banner banner-warn" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {info ? (
-          <p className="banner banner-ok" role="status">
-            {info}
-          </p>
-        ) : null}
-        <div className="edit-split">
-          <form onSubmit={editing ? (e) => { e.preventDefault(); void saveSelected(); } : (e) => void create(e)}>
-            <div className="form-head">
-              <h2 className="form-head-title">{editing ? `编辑 #${editing.id}` : "新建车辆"}</h2>
-              {editing ? <span className={statusTag(editing.status)}>{STATUS_LABEL[editing.status]}</span> : null}
-              {editing ? <span className="page-sub">v{editing.version}</span> : null}
-              {formBusy ? (
-                <span className="page-sub" role="status">
-                  处理中…
-                </span>
-              ) : null}
-              <button type="button" className="btn btn-ghost" onClick={() => setView("list")} disabled={formBusy}>
-                返回列表
-              </button>
-            </div>
-
-            <div className="form-grid-3">
-              <label className="field">
-                <span>品牌</span>
-                <input
-                  className="input"
-                  value={editing ? editing.brand : form.brand}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, brand: e.target.value })
-                      : setForm({ ...form, brand: e.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>车型</span>
-                <input
-                  className="input"
-                  value={editing ? editing.model : form.model}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, model: e.target.value })
-                      : setForm({ ...form, model: e.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>上牌年</span>
-                <input
-                  className="input"
-                  type="number"
-                  value={editing ? editing.registrationYear : form.registrationYear}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, registrationYear: Number(e.target.value) })
-                      : setForm({ ...form, registrationYear: Number(e.target.value) })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>里程（公里）</span>
-                <input
-                  className="input"
-                  type="number"
-                  value={editing ? editing.mileageKm : form.mileageKm}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, mileageKm: Number(e.target.value) })
-                      : setForm({ ...form, mileageKm: Number(e.target.value) })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>颜色</span>
-                <input
-                  className="input"
-                  value={editing ? editing.color : form.color}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, color: e.target.value })
-                      : setForm({ ...form, color: e.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>过户次数</span>
-                <input
-                  className="input"
-                  type="number"
-                  value={editing ? editing.transferCount : form.transferCount}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, transferCount: Number(e.target.value) })
-                      : setForm({ ...form, transferCount: Number(e.target.value) })
-                  }
-                />
-              </label>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <span className="page-sub">能源</span>
-              <div className="seg" style={{ marginTop: 10 }}>
-                {(
-                  [
-                    ["gasoline", "汽油"],
-                    ["ev", "纯电"],
-                    ["phev", "插混"],
-                    ["range_extender", "增程"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className="seg-opt"
-                    style={energy === value ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" } : undefined}
-                    onClick={() =>
-                      editing
-                        ? setSelected({ ...editing, energyType: value })
-                        : setForm({ ...form, energyType: value })
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="form-grid-3" style={{ marginTop: 16 }}>
-                {energy !== "ev" ? (
-                  <label className="field">
-                    <span>排量（升）</span>
-                    <input
-                      className="input"
-                      value={editing ? String(editing.displacementL ?? "") : form.displacementL}
-                      onChange={(e) =>
-                        editing
-                          ? setSelected({ ...editing, displacementL: e.target.value ? Number(e.target.value) : null })
-                          : setForm({ ...form, displacementL: e.target.value })
-                      }
-                    />
-                  </label>
-                ) : (
-                  <label className="field" style={{ opacity: 0.45 }}>
-                    <span>排量（升）</span>
-                    <input className="input" placeholder="纯电不填" disabled />
-                  </label>
-                )}
-                {energy !== "gasoline" ? (
-                  <>
-                    <label className="field">
-                      <span>电耗</span>
-                      <input
-                        className="input"
-                        value={editing ? String(editing.energyConsumption ?? "") : form.energyConsumption}
-                        onChange={(e) =>
-                          editing
-                            ? setSelected({
-                                ...editing,
-                                energyConsumption: e.target.value ? Number(e.target.value) : null,
-                              })
-                            : setForm({ ...form, energyConsumption: e.target.value })
-                        }
-                      />
-                    </label>
-                    <label className="field">
-                      <span>电池 kWh</span>
-                      <input
-                        className="input"
-                        value={editing ? String(editing.batteryKwh ?? "") : form.batteryKwh}
-                        onChange={(e) =>
-                          editing
-                            ? setSelected({ ...editing, batteryKwh: e.target.value ? Number(e.target.value) : null })
-                            : setForm({ ...form, batteryKwh: e.target.value })
-                        }
-                      />
-                    </label>
-                  </>
-                ) : (
-                  <>
-                    <label className="field" style={{ opacity: 0.45 }}>
-                      <span>电耗</span>
-                      <input className="input" placeholder="汽油车不填" disabled />
-                    </label>
-                    <label className="field" style={{ opacity: 0.45 }}>
-                      <span>电池 kWh</span>
-                      <input className="input" placeholder="汽油车不填" disabled />
-                    </label>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <label className="field" style={{ marginTop: 16 }}>
-              <span>车辆描述</span>
-              <textarea
-                className="input"
-                rows={3}
-                maxLength={500}
-                value={editing ? editing.conditionDesc : form.conditionDesc}
-                onChange={(e) =>
-                  editing
-                    ? setSelected({ ...editing, conditionDesc: e.target.value })
-                    : setForm({ ...form, conditionDesc: e.target.value })
-                }
-              />
-            </label>
-
-            <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
-              <label className="field field-fixed">
-                <span>VIN</span>
-                <input
-                  className="input"
-                  value={editing ? (editing.vinMasked ?? "") : form.vin}
-                  onChange={(e) => {
-                    if (editing) return;
-                    setForm({ ...form, vin: e.target.value });
-                  }}
-                  readOnly={Boolean(editing)}
-                />
-              </label>
-              {!editing ? (
-                <div>
-                  <span className="page-sub">初始价格</span>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}>
-                    <div className="seg">
-                      <button
-                        type="button"
-                        className="seg-opt"
-                        style={
-                          form.initialPriceType === "amount"
-                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
-                            : undefined
-                        }
-                        onClick={() => setForm({ ...form, initialPriceType: "amount" })}
-                      >
-                        标价
-                      </button>
-                      <button
-                        type="button"
-                        className="seg-opt"
-                        style={
-                          form.initialPriceType === "negotiable"
-                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
-                            : undefined
-                        }
-                        onClick={() => setForm({ ...form, initialPriceType: "negotiable" })}
-                      >
-                        面谈
-                      </button>
-                    </div>
-                    {form.initialPriceType === "amount" ? (
-                      <input
-                        className="input"
-                        value={form.initialAmount}
-                        onChange={(e) => setForm({ ...form, initialAmount: e.target.value })}
-                        style={{ width: 130 }}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <span className="page-sub">价格</span>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}>
-                    <div className="seg">
-                      <button
-                        type="button"
-                        className="seg-opt"
-                        style={
-                          priceType === "amount"
-                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
-                            : undefined
-                        }
-                        onClick={() => setPriceType("amount")}
-                      >
-                        标价
-                      </button>
-                      <button
-                        type="button"
-                        className="seg-opt"
-                        style={
-                          priceType === "negotiable"
-                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
-                            : undefined
-                        }
-                        onClick={() => setPriceType("negotiable")}
-                      >
-                        面谈
-                      </button>
-                    </div>
-                    {priceType === "amount" ? (
-                      <input className="input" value={priceAmount} onChange={(e) => setPriceAmount(e.target.value)} style={{ width: 130 }} />
-                    ) : null}
-                    <button type="button" className="btn btn-secondary" onClick={() => void savePrice()}>
-                      改价
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {editing ? (
-              <>
-                <div style={{ marginTop: 24 }}>
-                  <div className="form-head" style={{ marginBottom: 0 }}>
-                    <h3 style={{ margin: 0 }}>车辆图片</h3>
-                    <span className="page-sub">拖拽排序 · 第一张为封面 · 上架至少 4 张</span>
-                  </div>
-                  <div className="thumb-grid" style={{ marginTop: 12 }}>
-                    {images.map((img, i) => (
-                      <div key={img.id}>
-                        <div
-                          className="thumb"
-                          draggable
-                          onDragStart={() => setDragId(img.id)}
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={() => void dropReorder(img.id)}
-                          style={dragId === img.id ? { outline: "2px dashed var(--color-accent)" } : undefined}
-                        >
-                          <ThumbPreview src={img.url} alt={img.caption || `图片 ${i + 1}`} />
-                          {i === 0 ? <span className="tag thumb-cover">封面</span> : null}
-                        </div>
-                        <input
-                          className="input"
-                          value={img.caption}
-                          placeholder="图片说明"
-                          maxLength={200}
-                          onChange={(e) =>
-                            setImages((prev) => prev.map((x) => (x.id === img.id ? { ...x, caption: e.target.value } : x)))
-                          }
-                          onBlur={(e) => void saveCaption(img.id, e.target.value)}
-                          style={{ marginTop: 6, padding: "6px 12px" }}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          style={{ marginTop: 6, width: "100%" }}
-                          onClick={() => void deleteImage(img.id)}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    ))}
-                    <div>
-                      <label
-                        className="dropzone"
-                        htmlFor="vehicle-image-files"
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const files = Array.from(e.dataTransfer.files);
-                          if (files.length) void uploadImages(files);
-                        }}
-                      >
-                        拖拽图片到此处上传
-                        <input
-                          id="vehicle-image-files"
-                          className="visually-hidden"
-                          type="file"
-                          multiple
-                          accept="image/jpeg,image/png,image/webp"
-                          onChange={(e) => {
-                            const files = Array.from(e.target.files ?? []);
-                            if (files.length) void uploadImages(files);
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
-                      <div className="upload-task-list" aria-live="polite">
-                        {imageUploads.map((t) => (
-                          <div key={t.id} className={t.status === "failed" ? "page-sub upload-task-fail" : "page-sub"}>
-                            {t.name}{" "}
-                            {t.status === "uploading"
-                              ? "上传中…"
-                              : t.status === "done"
-                                ? "完成"
-                                : `失败${t.reason ? `：${t.reason}` : ""}`}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 24 }}>
-                  <h3>评估报告</h3>
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                    {reports.map((r) => (
-                      <div key={r.id} className="banner banner-ok" style={{ display: "flex", alignItems: "center", gap: 12, borderRadius: 999 }}>
-                        <a href={r.url} target="_blank" rel="noreferrer">
-                          {r.contentType} · {(r.byteSize / 1024).toFixed(0)} KB
-                        </a>
-                        <button type="button" className="btn btn-ghost" onClick={() => void deleteReport(r.id)}>
-                          删除
-                        </button>
-                      </div>
-                    ))}
-                    <label
-                      className="dropzone dropzone-pill"
-                      htmlFor="vehicle-report-files"
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const files = Array.from(e.dataTransfer.files);
-                        if (files.length) void uploadReports(files);
-                      }}
-                    >
-                      拖拽报告到此处上传
-                      <input
-                        id="vehicle-report-files"
-                        className="visually-hidden"
-                        type="file"
-                        multiple
-                        accept="application/pdf,image/jpeg,image/png"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files ?? []);
-                          if (files.length) void uploadReports(files);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <div className="upload-task-list" aria-live="polite">
-                    {reportUploads.map((t) => (
-                      <div key={t.id} className={t.status === "failed" ? "page-sub upload-task-fail" : "page-sub"}>
-                        {t.name}{" "}
-                        {t.status === "uploading"
-                          ? "上传中…"
-                          : t.status === "done"
-                            ? "完成"
-                            : `失败${t.reason ? `：${t.reason}` : ""}`}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {!editing ? (
-              <div style={{ marginTop: 24 }}>
-                <button type="submit" className="btn btn-primary">
-                  创建
-                </button>
-              </div>
-            ) : null}
-          </form>
-
-          {editing ? (
-            <aside>
-              <div className="card elev-sm" style={{ gap: 14 }}>
-                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  操作
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-block"
-                  onClick={() =>
-                    void saveSelected().then((updated) => {
-                      if (updated) return act("publish", updated);
-                    })
-                  }
-                >
-                  保存并发布
-                </button>
-                <button type="button" className="btn btn-secondary btn-block" onClick={() => void saveSelected()}>
-                  保存草稿
-                </button>
-                <button type="button" className="btn btn-ghost btn-block" onClick={() => void act("unpublish")}>
-                  下架
-                </button>
-                <button type="button" className="btn btn-ghost btn-block" onClick={() => void act("trash")}>
-                  进回收站
-                </button>
-              </div>
-              <div className="card elev-sm" style={{ marginTop: 20, gap: 10 }}>
-                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  前台链接
-                </span>
-                {editing.status === "published" ? (
-                  publicOrigin ? (
-                    <div className="link-chip">
-                      <code>{`${publicOrigin}/vehicles/${editing.id}`}</code>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => {
-                          void navigator.clipboard.writeText(`${publicOrigin}/vehicles/${editing.id}`);
-                          setCopied("已复制");
-                        }}
-                      >
-                        复制
-                      </button>
-                      {copied ? <span className="page-sub">{copied}</span> : null}
-                    </div>
-                  ) : (
-                    <span className="page-sub">未配置前台域名（VITE_PUBLIC_WEB_ORIGIN）</span>
-                  )
-                ) : (
-                  <span className="page-sub">未上架时不可复制（无访客预览）</span>
-                )}
-              </div>
-              <div className="card elev-sm" style={{ marginTop: 20, gap: 12 }}>
-                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  价格记录
-                </span>
-                {priceRecords.length === 0 ? <span className="page-sub">暂无价格变动记录</span> : null}
-                {priceRecords.map((r) => (
-                  <div key={r.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, gap: 8 }}>
-                    <span>
-                      {formatPrice(r.from)} → {formatPrice(r.to)}
-                      {r.operatorId ? <span className="page-sub"> · {r.operatorId}</span> : null}
-                    </span>
-                    <span className="page-sub">{r.createdAt.slice(5, 10)}</span>
-                  </div>
-                ))}
-                <div className="price price-sm">当前：{formatPrice(price)}</div>
-              </div>
-            </aside>
-          ) : null}
-        </div>
-      </div>
+      <VehicleFormView
+        editing={selected}
+        form={form}
+        setForm={setForm}
+        setSelected={setSelected}
+        error={error}
+        info={info}
+        formBusy={formBusy}
+        publicOrigin={publicOrigin}
+        price={price}
+        priceType={priceType}
+        setPriceType={setPriceType}
+        priceAmount={priceAmount}
+        setPriceAmount={setPriceAmount}
+        priceRecords={priceRecords}
+        images={images}
+        setImages={setImages}
+        reports={reports}
+        imageUploads={imageUploads}
+        reportUploads={reportUploads}
+        dragId={dragId}
+        setDragId={setDragId}
+        copied={copied}
+        setCopied={setCopied}
+        onBack={() => setView("list")}
+        onCreate={(e) => void create(e)}
+        onSave={saveSelected}
+        onAct={(path, vehicle) => void act(path, vehicle)}
+        onSavePrice={() => void savePrice()}
+        onUploadImages={(files) => void uploadImages(files)}
+        onUploadReports={(files) => void uploadReports(files)}
+        onDeleteImage={(id) => void deleteImage(id)}
+        onDeleteReport={(id) => void deleteReport(id)}
+        onSaveCaption={(id, caption) => void saveCaption(id, caption)}
+        onDropReorder={(id) => void dropReorder(id)}
+      />
     );
   }
 
-  const hasFilters = Boolean(status || q.trim());
-
   return (
-    <div>
-      <div className="page-head">
-        <div>
-          <h2>车辆</h2>
-          <p className="page-sub">{listLoading ? "加载中…" : `共 ${total} 辆`}</p>
-        </div>
-        <div className="toolbar">
-          <div className="seg" role="group" aria-label="按状态筛选">
-            {(
-              [
-                ["", "全部状态"],
-                ["draft", "草稿"],
-                ["published", "已上架"],
-                ["unpublished", "已下架"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={label}
-                type="button"
-                className="seg-opt"
-                aria-pressed={status === value}
-                onClick={() => {
-                  setStatus(value);
-                  void load(1, { status: value }).catch((err) =>
-                    setError(err instanceof Error ? err.message : "加载失败"),
-                  );
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <input
-            className="input"
-            placeholder="品牌 / 车型 / VIN 后六位"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void load(1).catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
-              }
-            }}
-            aria-label="关键字搜索"
-          />
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void load(1).catch((err) => setError(err instanceof Error ? err.message : "加载失败"))}
-          >
-            筛选
-          </button>
-          <button type="button" className="btn btn-primary" onClick={startCreate}>
-            新建车辆
-          </button>
-        </div>
-      </div>
-      {error ? (
-        <p className="banner banner-warn" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {info ? (
-        <p className="banner banner-ok" role="status">
-          {info}
-        </p>
-      ) : null}
-      {listLoading && items.length === 0 ? (
-        <p className="page-sub" role="status">
-          加载车辆列表…
-        </p>
-      ) : null}
-      {!listLoading && items.length === 0 ? (
-        <div className="empty-card">
-          <div className="empty-blob" />
-          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>
-            {hasFilters ? "没有符合条件的车辆" : "暂无车辆"}
-          </div>
-          <p className="page-sub">
-            {hasFilters ? "换个筛选条件再看看，或清空后查看全部。" : "点击右上角新建第一台车。"}
-          </p>
-          {hasFilters ? (
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => {
-                setStatus("");
-                setQ("");
-                void load(1, { status: "", q: "" }).catch((err) =>
-                  setError(err instanceof Error ? err.message : "加载失败"),
-                );
-              }}
-            >
-              清空筛选
-            </button>
-          ) : (
-            <button type="button" className="btn btn-primary" onClick={startCreate}>
-              新建车辆
-            </button>
-          )}
-        </div>
-      ) : null}
-      {items.length > 0 ? (
-        <ul className="vehicle-grid">
-          {items.map((v) => {
-            const cover = covers[v.id];
-            return (
-              <li key={v.id}>
-                <button type="button" className="card elev-sm vehicle-card" onClick={() => void open(v)}>
-                  {cover ? (
-                    <div className="vehicle-card-cover">
-                      <ThumbPreview src={cover} alt={`${v.brand} ${v.model}`} />
-                    </div>
-                  ) : (
-                    <div className="vehicle-card-cover vehicle-card-cover-mono" aria-hidden="true">
-                      {brandMono(v.brand)}
-                    </div>
-                  )}
-                  <div className="vehicle-card-body">
-                    <div className="card-title-row">
-                      <span className="vehicle-card-title">
-                        {v.brand || "（未填品牌）"} {v.model || ""}
-                      </span>
-                      <span className={statusTag(v.status)}>{STATUS_LABEL[v.status]}</span>
-                    </div>
-                    <div className="page-sub">
-                      #{v.id} · {v.registrationYear || "—"} 年 · {(v.mileageKm ?? 0).toLocaleString("zh-CN")} 公里
-                      {v.vinMasked ? ` · ${v.vinMasked}` : ""}
-                    </div>
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-      {totalPages > 1 ? (
-        <div className="pager">
-          <button type="button" className="btn btn-ghost" disabled={page <= 1} onClick={() => void load(page - 1)}>
-            上一页
-          </button>
-          <span>
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={page >= totalPages}
-            onClick={() => void load(page + 1)}
-          >
-            下一页
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <VehicleListView
+      items={items}
+      total={total}
+      page={page}
+      totalPages={totalPages}
+      status={status}
+      q={q}
+      listLoading={listLoading}
+      error={error}
+      info={info}
+      covers={covers}
+      onStatusChange={(value) => {
+        setStatus(value);
+        void load(1, { status: value }).catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
+      }}
+      onQChange={setQ}
+      onFilter={() => void load(1).catch((err) => setError(err instanceof Error ? err.message : "加载失败"))}
+      onClearFilters={() => {
+        setStatus("");
+        setQ("");
+        void load(1, { status: "", q: "" }).catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
+      }}
+      onOpen={(v) => void open(v)}
+      onCreate={startCreate}
+      onPage={(p) => void load(p).catch((err) => setError(err instanceof Error ? err.message : "加载失败"))}
+    />
   );
 }
