@@ -1020,15 +1020,6 @@ label.field > span {
   font-size: 28px;
 }
 
-/* legacy anchor kept for any residual rules */
-.form-head-legacy {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 22px;
-}
-
 .toolbar-end {
   align-items: flex-end;
 }
@@ -1051,6 +1042,104 @@ label.field > span {
 
 html {
   -webkit-text-size-adjust: 100%;
+}
+
+/* 全局焦点：键盘可见，鼠标点击不抢戏 */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.btn:focus:not(:focus-visible),
+.seg-opt:focus:not(:focus-visible),
+.nav-tab:focus:not(:focus-visible),
+.tag:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.input:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  outline: none;
+}
+
+.tag[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
+  border-color: var(--color-accent);
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+}
+
+.table th {
+  text-align: left;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-divider) 70%, transparent);
+  vertical-align: middle;
+}
+
+.table tbody tr:hover td {
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+.vehicle-card-skeleton {
+  pointer-events: none;
+  cursor: default;
+}
+
+.vehicle-card-skeleton:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.site-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-block: 10px;
+  margin-bottom: 4px;
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  button.vehicle-card:hover,
+  button.vehicle-card:focus-visible,
+  .vehicle-card:has(> a:hover),
+  .vehicle-card:has(> a:focus-visible) {
+    transform: none;
+  }
+
+  button.vehicle-card:hover .vehicle-card-cover img,
+  .vehicle-card:has(> a:hover) .vehicle-card-cover img {
+    transform: none;
+  }
 }
 
 @media (max-width: 1100px) {

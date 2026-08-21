@@ -132,9 +132,27 @@ export function RecyclePanel() {
       ) : null}
 
       {loading && items.length === 0 ? (
-        <p className="page-sub" role="status">
-          加载回收站…
-        </p>
+        <div className="table-wrap" aria-busy="true" aria-label="加载回收站">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>车辆</th>
+                <th>原状态</th>
+                <th>到期清除</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {[0, 1, 2, 3].map((i) => (
+                <tr key={i}>
+                  <td colSpan={4}>
+                    <div className="skeleton-line" style={{ width: `${70 - i * 8}%`, margin: "8px 0" }} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
 
       {!loading && items.length === 0 ? (

@@ -84,9 +84,20 @@ export function VehicleListView(p: VehicleListViewProps) {
         </p>
       ) : null}
       {p.listLoading && p.items.length === 0 ? (
-        <p className="page-sub" role="status">
-          加载车辆列表…
-        </p>
+        <ul className="vehicle-grid" aria-busy="true" aria-label="加载车辆列表">
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <li key={i}>
+              <div className="card elev-sm vehicle-card vehicle-card-skeleton">
+                <div className="skeleton-block vehicle-card-cover" />
+                <div className="vehicle-card-body">
+                  <div className="skeleton-line" style={{ width: "70%" }} />
+                  <div className="skeleton-line" style={{ width: "90%" }} />
+                  <div className="skeleton-line" style={{ width: "45%" }} />
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : null}
       {!p.listLoading && p.items.length === 0 ? (
         <div className="empty-card">

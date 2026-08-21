@@ -41,7 +41,9 @@ export function VehicleList({
     <div className="shell">
       <main className="public-phone">
         <SiteHeader total={total} loading={loading} />
-        <h1 className="public-list-title">在售车辆</h1>
+        <h1 className="public-list-title" id="public-list-heading">
+          在售车辆
+        </h1>
         <div style={{ marginTop: 16 }}>
           <FilterForm
             filters={filters}

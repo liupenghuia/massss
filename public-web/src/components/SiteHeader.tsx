@@ -2,7 +2,7 @@ import { go } from "../lib/nav";
 
 export function SiteHeader({ total, loading }: { total?: number; loading?: boolean }) {
   return (
-    <header className="site-header">
+    <header className="site-header site-header-sticky">
       <a
         className="brand-mark"
         href="/"
