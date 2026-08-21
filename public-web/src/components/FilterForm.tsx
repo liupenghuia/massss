@@ -60,7 +60,12 @@ export function FilterForm({ filters, onChange, onSubmit, onReset }: Props) {
             {priceChip}
           </Tag>
         ) : (
-          <button type="button" className="tag tag-outline" onClick={() => setPanel(panel === "price" ? null : "price")}>
+          <button
+            type="button"
+            className="tag tag-outline"
+            aria-expanded={panel === "price"}
+            onClick={() => setPanel(panel === "price" ? null : "price")}
+          >
             价格
           </button>
         )}
@@ -72,7 +77,12 @@ export function FilterForm({ filters, onChange, onSubmit, onReset }: Props) {
             {yearChip}
           </Tag>
         ) : (
-          <button type="button" className="tag tag-outline" onClick={() => setPanel(panel === "year" ? null : "year")}>
+          <button
+            type="button"
+            className="tag tag-outline"
+            aria-expanded={panel === "year"}
+            onClick={() => setPanel(panel === "year" ? null : "year")}
+          >
             上牌年
           </button>
         )}
@@ -81,7 +91,12 @@ export function FilterForm({ filters, onChange, onSubmit, onReset }: Props) {
             {mileageChip}
           </Tag>
         ) : (
-          <button type="button" className="tag tag-outline" onClick={() => setPanel(panel === "mileage" ? null : "mileage")}>
+          <button
+            type="button"
+            className="tag tag-outline"
+            aria-expanded={panel === "mileage"}
+            onClick={() => setPanel(panel === "mileage" ? null : "mileage")}
+          >
             里程
           </button>
         )}

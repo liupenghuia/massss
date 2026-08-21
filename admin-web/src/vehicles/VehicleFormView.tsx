@@ -196,9 +196,9 @@ export function VehicleFormView({
               </label>
             </div>
 
-            <div style={{ marginTop: 16 }}>
-              <span className="page-sub">能源</span>
-              <div className="seg" style={{ marginTop: 10 }}>
+            <div className="form-block">
+              <span className="field-label">能源</span>
+              <div className="seg" role="group" aria-label="能源类型">
                 {(
                   [
                     ["gasoline", "汽油"],
@@ -211,7 +211,7 @@ export function VehicleFormView({
                     key={value}
                     type="button"
                     className="seg-opt"
-                    style={energy === value ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" } : undefined}
+                    aria-pressed={energy === value}
                     onClick={() =>
                       editing
                         ? setSelected({ ...editing, energyType: value })
@@ -222,7 +222,7 @@ export function VehicleFormView({
                   </button>
                 ))}
               </div>
-              <div className="form-grid-3" style={{ marginTop: 16 }}>
+              <div className="form-grid-3">
                 {energy !== "ev" ? (
                   <label className="field">
                     <span>排量（升）</span>
@@ -237,7 +237,7 @@ export function VehicleFormView({
                     />
                   </label>
                 ) : (
-                  <label className="field" style={{ opacity: 0.45 }}>
+                  <label className="field field-muted">
                     <span>排量（升）</span>
                     <input className="input" placeholder="纯电不填" disabled />
                   </label>
@@ -274,11 +274,11 @@ export function VehicleFormView({
                   </>
                 ) : (
                   <>
-                    <label className="field" style={{ opacity: 0.45 }}>
+                    <label className="field field-muted">
                       <span>电耗</span>
                       <input className="input" placeholder="汽油车不填" disabled />
                     </label>
-                    <label className="field" style={{ opacity: 0.45 }}>
+                    <label className="field field-muted">
                       <span>电池 kWh</span>
                       <input className="input" placeholder="汽油车不填" disabled />
                     </label>
@@ -287,7 +287,7 @@ export function VehicleFormView({
               </div>
             </div>
 
-            <label className="field" style={{ marginTop: 16 }}>
+            <label className="field form-block">
               <span>车辆描述</span>
               <textarea
                 className="input"
@@ -302,7 +302,7 @@ export function VehicleFormView({
               />
             </label>
 
-            <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
+            <div className="form-block price-vin-row">
               <label className="field field-fixed">
                 <span>VIN</span>
                 <input
@@ -313,21 +313,18 @@ export function VehicleFormView({
                     setForm({ ...form, vin: e.target.value });
                   }}
                   readOnly={Boolean(editing)}
+                  aria-readonly={Boolean(editing)}
                 />
               </label>
               {!editing ? (
-                <div>
-                  <span className="page-sub">初始价格</span>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}>
-                    <div className="seg">
+                <div className="price-field">
+                  <span className="field-label">初始价格</span>
+                  <div className="price-controls">
+                    <div className="seg" role="group" aria-label="初始价格类型">
                       <button
                         type="button"
                         className="seg-opt"
-                        style={
-                          form.initialPriceType === "amount"
-                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
-                            : undefined
-                        }
+                        aria-pressed={form.initialPriceType === "amount"}
                         onClick={() => setForm({ ...form, initialPriceType: "amount" })}
                       >
                         标价
@@ -335,11 +332,7 @@ export function VehicleFormView({
                       <button
                         type="button"
                         className="seg-opt"
-                        style={
-                          form.initialPriceType === "negotiable"
-                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
-                            : undefined
-                        }
+                        aria-pressed={form.initialPriceType === "negotiable"}
                         onClick={() => setForm({ ...form, initialPriceType: "negotiable" })}
                       >
                         面谈
@@ -347,27 +340,24 @@ export function VehicleFormView({
                     </div>
                     {form.initialPriceType === "amount" ? (
                       <input
-                        className="input"
+                        className="input input-price"
                         value={form.initialAmount}
                         onChange={(e) => setForm({ ...form, initialAmount: e.target.value })}
-                        style={{ width: 130 }}
+                        inputMode="decimal"
+                        aria-label="初始金额（元）"
                       />
                     ) : null}
                   </div>
                 </div>
               ) : (
-                <div>
-                  <span className="page-sub">价格</span>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}>
-                    <div className="seg">
+                <div className="price-field">
+                  <span className="field-label">价格</span>
+                  <div className="price-controls">
+                    <div className="seg" role="group" aria-label="价格类型">
                       <button
                         type="button"
                         className="seg-opt"
-                        style={
-                          priceType === "amount"
-                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
-                            : undefined
-                        }
+                        aria-pressed={priceType === "amount"}
                         onClick={() => setPriceType("amount")}
                       >
                         标价
@@ -375,20 +365,22 @@ export function VehicleFormView({
                       <button
                         type="button"
                         className="seg-opt"
-                        style={
-                          priceType === "negotiable"
-                            ? { background: "var(--color-accent)", color: "var(--color-neutral-100)" }
-                            : undefined
-                        }
+                        aria-pressed={priceType === "negotiable"}
                         onClick={() => setPriceType("negotiable")}
                       >
                         面谈
                       </button>
                     </div>
                     {priceType === "amount" ? (
-                      <input className="input" value={priceAmount} onChange={(e) => setPriceAmount(e.target.value)} style={{ width: 130 }} />
+                      <input
+                        className="input input-price"
+                        value={priceAmount}
+                        onChange={(e) => setPriceAmount(e.target.value)}
+                        inputMode="decimal"
+                        aria-label="金额（元）"
+                      />
                     ) : null}
-                    <button type="button" className="btn btn-secondary" onClick={() => void onSavePrice()}>
+                    <button type="button" className="btn btn-secondary" onClick={() => void onSavePrice()} disabled={formBusy}>
                       改价
                     </button>
                   </div>
@@ -596,45 +588,42 @@ export function VehicleFormView({
             ) : null}
 
             {!editing ? (
-              <div style={{ marginTop: 24 }}>
-                <button type="submit" className="btn btn-primary">
-                  创建
+              <div className="form-block">
+                <button type="submit" className="btn btn-primary" disabled={formBusy}>
+                  {formBusy ? "创建中…" : "创建"}
                 </button>
               </div>
             ) : null}
           </form>
 
           {editing ? (
-            <aside>
-              <div className="card elev-sm" style={{ gap: 14 }}>
-                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  操作
-                </span>
+            <aside className="edit-aside">
+              <div className="card elev-sm ops-card">
+                <span className="ops-card-label">操作</span>
                 <button
                   type="button"
                   className="btn btn-primary btn-block"
+                  disabled={formBusy}
                   onClick={() =>
                     void onSave().then((updated) => {
                       if (updated) return onAct("publish", updated);
                     })
                   }
                 >
-                  保存并发布
+                  {formBusy ? "处理中…" : "保存并发布"}
                 </button>
-                <button type="button" className="btn btn-secondary btn-block" onClick={() => void onSave()}>
+                <button type="button" className="btn btn-secondary btn-block" disabled={formBusy} onClick={() => void onSave()}>
                   保存草稿
                 </button>
-                <button type="button" className="btn btn-ghost btn-block" onClick={() => void onAct("unpublish")}>
+                <button type="button" className="btn btn-ghost btn-block" disabled={formBusy} onClick={() => void onAct("unpublish")}>
                   下架
                 </button>
-                <button type="button" className="btn btn-ghost btn-block" onClick={() => void onAct("trash")}>
+                <button type="button" className="btn btn-ghost btn-block btn-danger-text" disabled={formBusy} onClick={() => void onAct("trash")}>
                   进回收站
                 </button>
               </div>
-              <div className="card elev-sm" style={{ marginTop: 20, gap: 10 }}>
-                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  前台链接
-                </span>
+              <div className="card elev-sm ops-card">
+                <span className="ops-card-label">前台链接</span>
                 {editing.status === "published" ? (
                   publicOrigin ? (
                     <div className="link-chip">
@@ -658,20 +647,20 @@ export function VehicleFormView({
                   <span className="page-sub">未上架时不可复制（无访客预览）</span>
                 )}
               </div>
-              <div className="card elev-sm" style={{ marginTop: 20, gap: 12 }}>
-                <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  价格记录
-                </span>
+              <div className="card elev-sm ops-card">
+                <span className="ops-card-label">价格记录</span>
                 {priceRecords.length === 0 ? <span className="page-sub">暂无价格变动记录</span> : null}
-                {priceRecords.map((r) => (
-                  <div key={r.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, gap: 8 }}>
-                    <span>
-                      {formatPrice(r.from)} → {formatPrice(r.to)}
-                      {r.operatorId ? <span className="page-sub"> · {r.operatorId}</span> : null}
-                    </span>
-                    <span className="page-sub">{r.createdAt.slice(5, 10)}</span>
-                  </div>
-                ))}
+                <div className="price-log-admin">
+                  {priceRecords.map((r) => (
+                    <div key={r.id} className="price-log-admin-row">
+                      <span>
+                        {formatPrice(r.from)} → {formatPrice(r.to)}
+                        {r.operatorId ? <span className="page-sub"> · {r.operatorId}</span> : null}
+                      </span>
+                      <span className="page-sub">{r.createdAt.slice(5, 10)}</span>
+                    </div>
+                  ))}
+                </div>
                 <div className="price price-sm">当前：{formatPrice(price)}</div>
               </div>
             </aside>

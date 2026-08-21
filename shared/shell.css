@@ -278,6 +278,87 @@ img.vehicle-card-cover {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 400px;
   gap: 32px;
+  align-items: start;
+}
+
+.edit-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: sticky;
+  top: 88px;
+}
+
+.ops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ops-card-label {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+
+.btn-danger-text {
+  color: var(--color-accent-700);
+}
+
+.form-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.field-label {
+  font-size: 13px;
+  color: var(--color-neutral-700);
+}
+
+.field-muted {
+  opacity: 0.45;
+}
+
+.price-vin-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.price-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.price-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.input-price {
+  width: 130px;
+}
+
+.price-log-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.price-log-admin-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
 }
 
 .form-grid-3 {
@@ -934,6 +1015,7 @@ html {
 @media (max-width: 1100px) {
   .vehicle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .edit-split { grid-template-columns: 1fr; }
+  .edit-aside { position: static; }
   .form-grid-3, .thumb-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .content, .topbar { padding-inline: 20px; }
 }
