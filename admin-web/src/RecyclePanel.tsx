@@ -23,11 +23,11 @@ const ORIGINAL: Record<string, string> = {
   unpublished: "已下架",
 };
 
-function daysLeft(iso: string): string | null {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (Number.isNaN(ms) || ms > 7 * 24 * 60 * 60 * 1000) return null;
-  const d = Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
-  return `${d} 天后`;
+/** ADR-090：剩余天数向下取整，不足一天为 0 */
+function remainingDaysFloor(purgeDueAt: string): number {
+  const ms = new Date(purgeDueAt).getTime() - Date.now();
+  if (Number.isNaN(ms)) return 0;
+  return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
 }
 
 export function RecyclePanel() {
@@ -118,7 +118,8 @@ export function RecyclePanel() {
         </thead>
         <tbody>
           {items.map((item) => {
-            const soon = daysLeft(item.purgeDueAt);
+            const left = remainingDaysFloor(item.purgeDueAt);
+            const soon = left <= 7;
             return (
               <tr key={item.id}>
                 <td>
@@ -131,7 +132,7 @@ export function RecyclePanel() {
                 </td>
                 <td style={soon ? { color: "var(--color-accent-700)" } : undefined}>
                   {item.purgeDueAt.slice(0, 10)}
-                  {soon ? ` · ${soon}` : ""}
+                  {` · 剩余 ${left} 天`}
                 </td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <button type="button" className="btn btn-ghost" onClick={() => void viewDetail(item)}>

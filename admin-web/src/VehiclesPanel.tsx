@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api } from "./api";
+import { api, ApiRequestError } from "./api";
 
 type EnergyType = "gasoline" | "ev" | "phev" | "range_extender";
 type Status = "draft" | "published" | "unpublished";
@@ -25,8 +25,10 @@ type AdminVehicle = {
 type PriceValue = { type: "amount"; amount: number } | { type: "negotiable"; amount: null };
 type ImageItem = { id: number; url: string; caption: string };
 type ReportItem = { id: number; url: string; contentType: string; byteSize: number };
-type PriceRecordItem = { id: number; from: PriceValue; to: PriceValue; createdAt: string };
-type UploadTask = { name: string; status: "uploading" | "done" | "failed" };
+/** operatorId：契约字段名；服务端按 ADR-076 填登录账号名 */
+type PriceRecordItem = { id: number; from: PriceValue | { type: "unset"; amount: null }; to: PriceValue; createdAt: string; operatorId?: string };
+/** ADR-058：批量上传按文件展示成功/失败与失败原因 */
+type UploadTask = { id: number; name: string; status: "uploading" | "done" | "failed"; reason?: string };
 
 const emptyForm = {
   brand: "",
@@ -44,6 +46,30 @@ const emptyForm = {
   initialPriceType: "amount" as "amount" | "negotiable",
   initialAmount: "1.00",
 };
+
+const CORE_FIELD_LABEL: Record<string, string> = {
+  brand: "品牌",
+  model: "车型",
+  registrationYear: "上牌年",
+  mileageKm: "里程",
+  color: "颜色",
+  conditionDesc: "车辆描述",
+  energyType: "能源类型",
+  transferCount: "过户次数",
+};
+
+// PUBLISH_PRECONDITION_FAILED 的 missing 可能含 images/price/coreFields，
+// coreFields 时 details.missingCoreFields 列出具体缺失字段名（ADR-035）。
+function describeError(err: unknown, fallback: string): string {
+  if (err instanceof ApiRequestError && err.code === "PUBLISH_PRECONDITION_FAILED") {
+    const missingCoreFields = err.details.missingCoreFields;
+    if (Array.isArray(missingCoreFields) && missingCoreFields.length > 0) {
+      const labels = missingCoreFields.map((f) => CORE_FIELD_LABEL[String(f)] ?? String(f)).join("、");
+      return `${err.message}：核心字段缺失（${labels}）`;
+    }
+  }
+  return err instanceof Error ? err.message : fallback;
+}
 
 const STATUS_LABEL: Record<Status, string> = {
   draft: "草稿",
@@ -91,9 +117,11 @@ export function VehiclesPanel() {
   const [priceType, setPriceType] = useState<"amount" | "negotiable">("amount");
   const [priceAmount, setPriceAmount] = useState("1.00");
   const [copied, setCopied] = useState("");
+  const [info, setInfo] = useState("");
   const [dragId, setDragId] = useState<number | null>(null);
 
-  const publicOrigin = (import.meta.env.VITE_PUBLIC_WEB_ORIGIN as string | undefined) ?? "http://127.0.0.1:5173";
+  // ADR-041：不写死默认前台域名；缺失时提示配置，禁止拼出空前缀错误链接
+  const publicOrigin = (import.meta.env.VITE_PUBLIC_WEB_ORIGIN as string | undefined)?.trim() || "";
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -115,14 +143,16 @@ export function VehiclesPanel() {
   async function create(e: FormEvent) {
     e.preventDefault();
     setError("");
+    // ADR-035：核心字段允许缺失以保存为草稿，缺失时不传该字段（而不是传空字符串/0），
+    // 由服务端在发布时才校验是否齐全。
     const body: Record<string, unknown> = {
-      brand: form.brand,
-      model: form.model,
+      brand: form.brand || undefined,
+      model: form.model || undefined,
       registrationYear: Number(form.registrationYear),
       mileageKm: Number(form.mileageKm),
-      color: form.color,
-      conditionDesc: form.conditionDesc,
-      energyType: form.energyType,
+      color: form.color || undefined,
+      conditionDesc: form.conditionDesc || undefined,
+      energyType: form.energyType || undefined,
       transferCount: Number(form.transferCount),
       displacementL: form.energyType === "ev" ? null : Number(form.displacementL),
       energyConsumption: form.energyType === "gasoline" ? null : form.energyConsumption ? Number(form.energyConsumption) : null,
@@ -202,12 +232,17 @@ export function VehiclesPanel() {
   async function act(path: string, vehicle: AdminVehicle = selected as AdminVehicle) {
     if (!vehicle) return;
     setError("");
+    setInfo("");
     try {
       const updated = await api<AdminVehicle>(`/admin/vehicles/${vehicle.id}/${path}`, {
         method: "POST",
         body: JSON.stringify({ version: vehicle.version }),
       });
       if (path === "trash") {
+        // ADR-090：幂等重复删除不刷新保留期，给非阻断提示
+        if (updated.version === vehicle.version) {
+          setInfo("该车辆已在回收站中，保留期不变");
+        }
         setSelected(null);
         setView("list");
         await load();
@@ -216,7 +251,7 @@ export function VehiclesPanel() {
       setSelected(updated);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      setError(describeError(err, "操作失败"));
     }
   }
 
@@ -241,8 +276,9 @@ export function VehiclesPanel() {
   async function uploadImages(files: File[]) {
     if (!selected) return;
     setError("");
-    setImageUploads(files.map((f) => ({ name: f.name, status: "uploading" })));
-    for (const file of files) {
+    setImageUploads(files.map((f, id) => ({ id, name: f.name, status: "uploading" as const })));
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]!;
       try {
         const contentType = file.type || "image/jpeg";
         const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
@@ -259,10 +295,10 @@ export function VehiclesPanel() {
           method: "POST",
           body: JSON.stringify({ objectKey: presign.objectKey, caption: "" }),
         });
-        setImageUploads((prev) => prev.map((t) => (t.name === file.name ? { ...t, status: "done" } : t)));
+        setImageUploads((prev) => prev.map((t) => (t.id === i ? { ...t, status: "done", reason: undefined } : t)));
       } catch (err) {
-        setImageUploads((prev) => prev.map((t) => (t.name === file.name ? { ...t, status: "failed" } : t)));
-        setError(err instanceof Error ? err.message : "上传失败");
+        const reason = err instanceof Error ? err.message : "上传失败";
+        setImageUploads((prev) => prev.map((t) => (t.id === i ? { ...t, status: "failed", reason } : t)));
       }
     }
     const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${selected.id}/images`);
@@ -272,8 +308,9 @@ export function VehiclesPanel() {
   async function uploadReports(files: File[]) {
     if (!selected) return;
     setError("");
-    setReportUploads(files.map((f) => ({ name: f.name, status: "uploading" })));
-    for (const file of files) {
+    setReportUploads(files.map((f, id) => ({ id, name: f.name, status: "uploading" as const })));
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]!;
       try {
         const contentType = file.type || "application/pdf";
         const presign = await api<{ uploadUrl: string; objectKey: string; requiredHeaders: Record<string, string> }>(
@@ -290,10 +327,10 @@ export function VehiclesPanel() {
           method: "POST",
           body: JSON.stringify({ objectKey: presign.objectKey }),
         });
-        setReportUploads((prev) => prev.map((t) => (t.name === file.name ? { ...t, status: "done" } : t)));
+        setReportUploads((prev) => prev.map((t) => (t.id === i ? { ...t, status: "done", reason: undefined } : t)));
       } catch (err) {
-        setReportUploads((prev) => prev.map((t) => (t.name === file.name ? { ...t, status: "failed" } : t)));
-        setError(err instanceof Error ? err.message : "上传失败");
+        const reason = err instanceof Error ? err.message : "上传失败";
+        setReportUploads((prev) => prev.map((t) => (t.id === i ? { ...t, status: "failed", reason } : t)));
       }
     }
     const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${selected.id}/reports`);
@@ -386,6 +423,11 @@ export function VehiclesPanel() {
             {error}
           </p>
         ) : null}
+        {info ? (
+          <p className="banner banner-ok" role="status">
+            {info}
+          </p>
+        ) : null}
         <div className="edit-split">
           <form onSubmit={editing ? (e) => { e.preventDefault(); void saveSelected(); } : (e) => void create(e)}>
             <div className="form-head">
@@ -402,7 +444,6 @@ export function VehiclesPanel() {
                 <span>品牌</span>
                 <input
                   className="input"
-                  required
                   value={editing ? editing.brand : form.brand}
                   onChange={(e) =>
                     editing
@@ -415,7 +456,6 @@ export function VehiclesPanel() {
                 <span>车型</span>
                 <input
                   className="input"
-                  required
                   value={editing ? editing.model : form.model}
                   onChange={(e) =>
                     editing
@@ -454,7 +494,6 @@ export function VehiclesPanel() {
                 <span>颜色</span>
                 <input
                   className="input"
-                  required
                   value={editing ? editing.color : form.color}
                   onChange={(e) =>
                     editing
@@ -574,7 +613,7 @@ export function VehiclesPanel() {
               <textarea
                 className="input"
                 rows={3}
-                required
+                maxLength={500}
                 value={editing ? editing.conditionDesc : form.conditionDesc}
                 onChange={(e) =>
                   editing
@@ -703,6 +742,7 @@ export function VehiclesPanel() {
                           className="input"
                           value={img.caption}
                           placeholder="图片说明"
+                          maxLength={200}
                           onChange={(e) =>
                             setImages((prev) => prev.map((x) => (x.id === img.id ? { ...x, caption: e.target.value } : x)))
                           }
@@ -745,8 +785,13 @@ export function VehiclesPanel() {
                         />
                       </label>
                       {imageUploads.map((t) => (
-                        <div key={t.name} className="page-sub">
-                          {t.name} {t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
+                        <div key={t.id} className="page-sub">
+                          {t.name}{" "}
+                          {t.status === "uploading"
+                            ? "上传中…"
+                            : t.status === "done"
+                              ? "完成"
+                              : `失败${t.reason ? `：${t.reason}` : ""}`}
                         </div>
                       ))}
                     </div>
@@ -792,8 +837,13 @@ export function VehiclesPanel() {
                     </label>
                   </div>
                   {reportUploads.map((t) => (
-                    <div key={t.name} className="page-sub">
-                      {t.name} {t.status === "uploading" ? "上传中…" : t.status === "done" ? "完成" : "失败"}
+                    <div key={t.id} className="page-sub">
+                      {t.name}{" "}
+                      {t.status === "uploading"
+                        ? "上传中…"
+                        : t.status === "done"
+                          ? "完成"
+                          : `失败${t.reason ? `：${t.reason}` : ""}`}
                     </div>
                   ))}
                 </div>
@@ -841,20 +891,24 @@ export function VehiclesPanel() {
                   前台链接
                 </span>
                 {editing.status === "published" ? (
-                  <div className="link-chip">
-                    <code>{`${publicOrigin}/vehicles/${editing.id}`}</code>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(`${publicOrigin}/vehicles/${editing.id}`);
-                        setCopied("已复制");
-                      }}
-                    >
-                      复制
-                    </button>
-                    {copied ? <span className="page-sub">{copied}</span> : null}
-                  </div>
+                  publicOrigin ? (
+                    <div className="link-chip">
+                      <code>{`${publicOrigin}/vehicles/${editing.id}`}</code>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(`${publicOrigin}/vehicles/${editing.id}`);
+                          setCopied("已复制");
+                        }}
+                      >
+                        复制
+                      </button>
+                      {copied ? <span className="page-sub">{copied}</span> : null}
+                    </div>
+                  ) : (
+                    <span className="page-sub">未配置前台域名（VITE_PUBLIC_WEB_ORIGIN）</span>
+                  )
                 ) : (
                   <span className="page-sub">未上架时不可复制（无访客预览）</span>
                 )}
@@ -863,11 +917,12 @@ export function VehiclesPanel() {
                 <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
                   价格记录
                 </span>
-                {priceRecords.length === 0 ? <span className="page-sub">暂无记录</span> : null}
+                {priceRecords.length === 0 ? <span className="page-sub">暂无价格变动记录</span> : null}
                 {priceRecords.map((r) => (
-                  <div key={r.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <div key={r.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, gap: 8 }}>
                     <span>
                       {formatPrice(r.from)} → {formatPrice(r.to)}
+                      {r.operatorId ? <span className="page-sub"> · {r.operatorId}</span> : null}
                     </span>
                     <span className="page-sub">{r.createdAt.slice(5, 10)}</span>
                   </div>
@@ -923,6 +978,11 @@ export function VehiclesPanel() {
       {error ? (
         <p className="banner banner-warn" role="alert">
           {error}
+        </p>
+      ) : null}
+      {info ? (
+        <p className="banner banner-ok" role="status">
+          {info}
         </p>
       ) : null}
       {items.length === 0 ? (

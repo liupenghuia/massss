@@ -7,7 +7,8 @@ export function NotFound() {
       <main className="public-phone">
         <div className="empty-card">
           <div className="empty-blob" />
-          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>找不到该车辆</div>
+          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>该车辆不存在或已下架</div>
+          <p className="page-sub">可能已被下架或删除</p>
           <Button variant="primary" type="button" onClick={() => go("/")}>
             返回列表
           </Button>

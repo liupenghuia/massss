@@ -1,9 +1,16 @@
-import { useEffect, useRef, useState, type TouchEvent } from "react";
+import { useEffect, useRef, useState, type ReactNode, type TouchEvent } from "react";
 import type { ImageItem } from "../types";
 import { Button } from "./ui/Button";
 import { SmartImage } from "./ui/SmartImage";
 
-export function Gallery({ images, title }: { images: ImageItem[]; title: string }) {
+type Props = {
+  images: ImageItem[];
+  title: string;
+  intro?: ReactNode;
+  footer?: ReactNode;
+};
+
+export function Gallery({ images, title, intro, footer }: Props) {
   const [active, setActive] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const touchX = useRef<number | null>(null);
@@ -34,58 +41,68 @@ export function Gallery({ images, title }: { images: ImageItem[]; title: string 
     if (delta < -48) setActive((i) => Math.min(images.length - 1, i + 1));
   }
 
+  function openAt(index: number) {
+    setActive(index);
+    setLightbox(true);
+  }
+
+  // ADR-039：图片数为 0 时整块不渲染（无空框 / 占位 /「暂无图片」文案）
   return (
     <div>
-      <button
-        type="button"
-        className="public-hero"
-        style={{ width: "100%", border: 0, padding: 16 }}
-        onClick={() => current && setLightbox(true)}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-      >
-        {current ? (
-          <SmartImage src={current.url} alt={current.caption || title} priority className="public-hero-img" />
-        ) : (
-          <span className="page-sub">暂无图片</span>
-        )}
-        {images.length > 0 ? (
+      {images.length > 0 ? (
+        <button
+          type="button"
+          className="public-hero"
+          style={{ width: "100%", border: 0, padding: 16 }}
+          onClick={() => current && setLightbox(true)}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        >
+          {current ? (
+            <SmartImage src={current.url} alt={current.caption || title} priority className="public-hero-img" />
+          ) : null}
           <span className="tag tag-neutral" style={{ position: "relative", zIndex: 1 }}>
             {active + 1} / {images.length}
           </span>
-        ) : null}
-      </button>
-
-      {images.length > 0 ? (
-        <div className="gallery-thumbs">
-          <div style={{ fontFamily: "var(--font-heading)", fontSize: 18 }}>车辆图片</div>
-          <div className="photo-grid" style={{ marginTop: 10 }}>
-            {images.slice(0, 6).map((img, i) => (
-              <button
-                key={img.id}
-                type="button"
-                className="photo-cell"
-                onClick={() => {
-                  setActive(i);
-                  setLightbox(true);
-                }}
-              >
-                {i === 5 && extra > 0 ? (
-                  <span>+{extra}</span>
-                ) : (
-                  <SmartImage src={img.url} alt={img.caption || `${title} ${i + 1}`} sizes="33vw" />
-                )}
-              </button>
-            ))}
-          </div>
-          {current?.caption ? <p className="page-sub">图片说明：{current.caption}</p> : null}
-        </div>
+        </button>
       ) : null}
+
+      <main className="public-phone">
+        {intro}
+        {images.length > 0 ? (
+          <section className="detail-block">
+            <h2 className="detail-section">车辆图片</h2>
+            <div className="photo-grid">
+              {images.slice(0, 6).map((img, i) => {
+                const overflow = i === 5 && extra > 0;
+                return (
+                  <figure key={img.id} className="photo-tile">
+                    <button
+                      type="button"
+                      className={i === active ? "photo-cell photo-cell-on" : "photo-cell"}
+                      onClick={() => openAt(i)}
+                    >
+                      {overflow ? (
+                        <span>+{extra}</span>
+                      ) : (
+                        <SmartImage src={img.url} alt={img.caption || `${title} ${i + 1}`} sizes="33vw" />
+                      )}
+                    </button>
+                    {!overflow && img.caption ? <figcaption className="photo-caption">{img.caption}</figcaption> : null}
+                  </figure>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+        {footer}
+      </main>
 
       {lightbox && current ? (
         <div className="lightbox" role="dialog" aria-modal="true" aria-label="车辆图片" onClick={() => setLightbox(false)}>
           <img src={current.url} alt={current.caption || title} onClick={(e) => e.stopPropagation()} />
-          <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: 420 }}>
+          {current.caption ? <p className="lightbox-caption">{current.caption}</p> : null}
+          <div className="lightbox-nav">
             <Button
               variant="ghost"
               type="button"

@@ -81,8 +81,8 @@ export default function App() {
         ]);
         if (!dRes.ok) {
           setDetail(null);
-          setError("找不到该车辆");
-          document.title = "找不到该车辆";
+          setError("该车辆不存在或已下架");
+          document.title = "该车辆不存在或已下架";
           return;
         }
         const d: Detail = await dRes.json();
@@ -115,7 +115,7 @@ export default function App() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  if (route.kind === "notfound" || (route.kind === "detail" && error === "找不到该车辆")) {
+  if (route.kind === "notfound" || (route.kind === "detail" && error === "该车辆不存在或已下架")) {
     return <NotFound />;
   }
 
