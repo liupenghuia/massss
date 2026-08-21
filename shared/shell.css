@@ -387,6 +387,86 @@ textarea.input {
   padding: 22px 22px 40px;
 }
 
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.site-header .brand-mark {
+  text-decoration: none;
+  color: inherit;
+}
+
+.public-list-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+/* 平板及以上：前台列表两列卡片 */
+@media (min-width: 720px) {
+  .public-list-stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+}
+
+.public-list-title {
+  margin: 16px 0 0;
+  font-family: var(--font-heading);
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-neutral-200), var(--color-neutral-300), var(--color-neutral-200));
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton-block {
+  height: 140px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--color-neutral-200), var(--color-neutral-300), var(--color-neutral-200));
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.vehicle-card a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-md);
+}
+
+.password-card {
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 28px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.password-card h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 26px;
+}
+
 .detail-title {
   margin: 0;
   font-size: 28px;

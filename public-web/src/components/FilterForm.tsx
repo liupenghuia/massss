@@ -90,21 +90,30 @@ export function FilterForm({ filters, onChange, onSubmit, onReset }: Props) {
         </button>
       </div>
       {panel === "price" ? (
-        <div className="toolbar" style={{ marginTop: 10 }}>
-          <input className="input" placeholder="最低价（元）" value={filters.priceMin} onChange={(e) => set("priceMin", e.target.value)} />
-          <input className="input" placeholder="最高价（元）" value={filters.priceMax} onChange={(e) => set("priceMax", e.target.value)} />
+        <div className="toolbar" style={{ marginTop: 10 }} role="group" aria-label="价格区间">
+          <input className="input" inputMode="decimal" placeholder="最低价（元）" value={filters.priceMin} onChange={(e) => set("priceMin", e.target.value)} aria-label="最低价" />
+          <input className="input" inputMode="decimal" placeholder="最高价（元）" value={filters.priceMax} onChange={(e) => set("priceMax", e.target.value)} aria-label="最高价" />
+          <Button variant="secondary" type="submit" onClick={() => setPanel(null)}>
+            应用
+          </Button>
         </div>
       ) : null}
       {panel === "year" ? (
-        <div className="toolbar" style={{ marginTop: 10 }}>
-          <input className="input" placeholder="上牌年起" value={filters.registrationYearMin} onChange={(e) => set("registrationYearMin", e.target.value)} />
-          <input className="input" placeholder="上牌年止" value={filters.registrationYearMax} onChange={(e) => set("registrationYearMax", e.target.value)} />
+        <div className="toolbar" style={{ marginTop: 10 }} role="group" aria-label="上牌年份区间">
+          <input className="input" inputMode="numeric" placeholder="上牌年起" value={filters.registrationYearMin} onChange={(e) => set("registrationYearMin", e.target.value)} aria-label="上牌年起" />
+          <input className="input" inputMode="numeric" placeholder="上牌年止" value={filters.registrationYearMax} onChange={(e) => set("registrationYearMax", e.target.value)} aria-label="上牌年止" />
+          <Button variant="secondary" type="submit" onClick={() => setPanel(null)}>
+            应用
+          </Button>
         </div>
       ) : null}
       {panel === "mileage" ? (
-        <div className="toolbar" style={{ marginTop: 10 }}>
-          <input className="input" placeholder="里程起" value={filters.mileageKmMin} onChange={(e) => set("mileageKmMin", e.target.value)} />
-          <input className="input" placeholder="里程止" value={filters.mileageKmMax} onChange={(e) => set("mileageKmMax", e.target.value)} />
+        <div className="toolbar" style={{ marginTop: 10 }} role="group" aria-label="里程区间">
+          <input className="input" inputMode="numeric" placeholder="里程起" value={filters.mileageKmMin} onChange={(e) => set("mileageKmMin", e.target.value)} aria-label="里程起" />
+          <input className="input" inputMode="numeric" placeholder="里程止" value={filters.mileageKmMax} onChange={(e) => set("mileageKmMax", e.target.value)} aria-label="里程止" />
+          <Button variant="secondary" type="submit" onClick={() => setPanel(null)}>
+            应用
+          </Button>
         </div>
       ) : null}
     </form>

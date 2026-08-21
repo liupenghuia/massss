@@ -1,8 +1,8 @@
 import { go } from "../lib/nav";
 
-export function SiteHeader({ total }: { total?: number }) {
+export function SiteHeader({ total, loading }: { total?: number; loading?: boolean }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <header className="site-header">
       <a
         className="brand-mark"
         href="/"
@@ -13,7 +13,11 @@ export function SiteHeader({ total }: { total?: number }) {
       >
         车行
       </a>
-      {typeof total === "number" ? <span className="page-sub">共 {total} 辆</span> : null}
-    </div>
+      {typeof total === "number" ? (
+        <span className="page-sub" aria-live="polite">
+          {loading ? "加载中…" : `共 ${total} 辆`}
+        </span>
+      ) : null}
+    </header>
   );
 }

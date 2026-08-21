@@ -38,13 +38,20 @@ export function LoginPage() {
 
   return (
     <div className="login-wrap">
-      <form className="login-card" onSubmit={(e) => void onSubmit(e)}>
+      <form className="login-card" onSubmit={(e) => void onSubmit(e)} aria-busy={loading}>
         <div className="login-aside" aria-hidden="true">
           <div className="login-blob" />
         </div>
         <div className="login-body">
+          <p className="page-sub" style={{ margin: 0 }}>
+            车行 · 管理后台
+          </p>
           <h1>管理后台登录</h1>
-          {notice ? <div className="banner banner-ok">{notice}</div> : null}
+          {notice ? (
+            <div className="banner banner-ok" role="status">
+              {notice}
+            </div>
+          ) : null}
           {error ? (
             <div className="banner banner-warn" role="alert">
               {error}
@@ -57,7 +64,9 @@ export function LoginPage() {
               value={loginName}
               onChange={(e) => setLoginName(e.target.value)}
               autoComplete="username"
+              autoFocus
               required
+              maxLength={50}
             />
           </label>
           <label className="field">
@@ -69,6 +78,7 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
               required
+              maxLength={72}
             />
           </label>
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>

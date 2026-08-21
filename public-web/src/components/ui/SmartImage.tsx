@@ -6,14 +6,21 @@ type Props = {
   priority?: boolean;
   sizes?: string;
   className?: string;
+  /** 无图时展示的短字标（默认取 alt 首字） */
+  mono?: string;
 };
 
-export function SmartImage({ src, alt, priority = false, sizes = "100vw", className }: Props) {
+export function SmartImage({ src, alt, priority = false, sizes = "100vw", className, mono }: Props) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   if (!src || src === failedSrc) {
+    const mark = (mono ?? alt).trim().slice(0, 1) || "车";
     return (
-      <div className={className ?? "vehicle-card-cover"} aria-hidden={alt === ""}>
-        {alt || "暂无图片"}
+      <div
+        className={`${className ?? "vehicle-card-cover"} vehicle-card-cover-mono`.trim()}
+        role="img"
+        aria-label={alt || "暂无图片"}
+      >
+        {mark}
       </div>
     );
   }
