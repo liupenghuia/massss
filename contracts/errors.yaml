@@ -1,7 +1,7 @@
 # 统一错误码表（人读 + 可供 openapi.yaml $ref）
 # first release，not breaking。contracts/ 此前为空，本次全部新增。
 
-version: "1.1.0"
+version: "1.3.0"
 breakingChange: false
 
 # 通用错误响应：所有 HTTP 错误体均为本结构。
@@ -43,6 +43,7 @@ components:
         - CANNOT_DISABLE_SELF
         - LAST_SUPER_ADMIN
         - TOO_MANY_REQUESTS
+        - VEHICLE_VIN_DUPLICATE
 
     ErrorResponse:
       type: object
@@ -70,8 +71,8 @@ components:
           uniqueItems: true
           items:
             type: string
-            enum: [images, price]
-          description: 未满足的前置项。图片数 < 4 时含 images；价格未填写时含 price。
+            enum: [images, price, coreFields]
+          description: 未满足的前置项。图片数 < 4 时含 images；价格未填写时含 price；核心字段缺失时含 coreFields。
         imageCount:
           type: integer
           minimum: 0
@@ -79,6 +80,13 @@ components:
         priceFilled:
           type: boolean
           description: 当前是否已填价（进程内 isPriceFilled 的成功返回值；面谈视为已填写）。
+        missingCoreFields:
+          type: array
+          items:
+            type: string
+          description: |
+            missing 含 coreFields 时，列出具体缺失的核心字段名（camelCase：brand/model/
+            registrationYear/mileageKm/color/conditionDesc/energyType/transferCount），否则省略该字段
 
     IllegalStatusTransitionDetails:
       type: object
@@ -209,6 +217,7 @@ codes:
       草稿或已下架车辆发布/重新上架时，图片数 < 4 或价格未填写。
       details.missing 列出 images 与/或 price，并给出 imageCount、priceFilled。
       countImages / isPriceFilled 抛错时不得使用本码，应返回 INTERNAL_ERROR。
+      核心字段缺失同样归入本码，可以和图片/价格缺失同时出现在同一次 missing 数组里。
 
   - code: VALIDATION_ERROR
     httpStatus: 400
@@ -397,4 +406,17 @@ codes:
     details: {}
     note: |
       F-002。公开只读接口（GET /public/*）的 IP 级限流触发：窗口 60 秒、阈值 1000 次/IP。
-      仅作用于公开接口，不含管理端登录限流（登录限流为账号级 15 分钟锁定机制，见 ACCOUNT_LOCKED）。
+      F-006（ADR-103）：POST /admin/auth/login 同样有 IP 级限流，与账号级 15 分钟锁定
+      （见 ACCOUNT_LOCKED）是两层独立防线；同时触发时 IP 限流检查在前，命中即返回本码，
+      不再往下判断账号锁定。
+
+  - code: VEHICLE_VIN_DUPLICATE
+    httpStatus: 409
+    fixedMessage: false
+    message: 该车架号已被其他车辆使用
+    details: {}
+    note: |
+      F-001（ADR-036）。adminCreateVehicle / adminPatchVehicle 时 vin 与其他车辆重复时触发。
+      "其他车辆"范围覆盖所有未被彻底清除的车辆（含回收站中 trashedAt 不为空但 purged=false
+      的车辆），以及已被彻底清除（purged=true）的车辆——已清除车辆的 VIN 不释放，不可复用
+      （沿用 ADR-024 的旧决策，F-005 conflicts 处理时确认覆盖本议题）。

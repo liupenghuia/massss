@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: 车辆信息展示系统 HTTP 契约
-  version: 1.0.0
+  version: 1.2.0
   summary: F-001 / F-003 / F-004 首次落约
   description: |
     **first release，not breaking。** `contracts/` 此前为空，本次全部为新增。
@@ -1377,6 +1377,8 @@ paths:
         "403":
           description: 密码错误或账号不存在（INVALID_CREDENTIALS）/ 账号已停用（ACCOUNT_DISABLED）/ 账号被锁定（ACCOUNT_LOCKED）
           content: { application/json: { schema: { $ref: './errors.yaml#/components/schemas/ErrorResponse' } } }
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
         "500": { $ref: '#/components/responses/InternalError' }
 
   /admin/auth/logout:
@@ -1715,7 +1717,7 @@ components:
             message: 车辆不存在
             details: {}
     Conflict:
-      description: 冲突（VEHICLE_VERSION_CONFLICT / IDEMPOTENCY_KEY_CONFLICT / ILLEGAL_STATUS_TRANSITION / PUBLISHED_IMAGE_MIN）
+      description: 冲突（VEHICLE_VERSION_CONFLICT / IDEMPOTENCY_KEY_CONFLICT / ILLEGAL_STATUS_TRANSITION / PUBLISHED_IMAGE_MIN / VEHICLE_VIN_DUPLICATE）
       content:
         application/json:
           schema:
@@ -1731,7 +1733,11 @@ components:
             message: 服务内部错误
             details: {}
     TooManyRequests:
-      description: 公开只读接口 IP 级限流触发（窗口 60 秒、阈值 1000 次/IP）
+      description: |
+        IP 级限流触发，窗口与阈值随接口而定（见对应接口 description）：
+        公开只读接口（GET /public/*）窗口 60 秒、阈值 1000 次/IP；
+        POST /admin/auth/login 另有独立的 IP 级限流（F-006，ADR-103），
+        与账号级锁定（ACCOUNT_LOCKED）是两层独立防线，IP 限流检查在前。
       content:
         application/json:
           schema:
@@ -1767,14 +1773,6 @@ components:
         - id
         - status
         - version
-        - brand
-        - model
-        - registrationYear
-        - mileageKm
-        - color
-        - conditionDesc
-        - energyType
-        - transferCount
         - displacementL
         - energyConsumption
         - batteryKwh
@@ -1806,32 +1804,35 @@ components:
           minimum: 1
           description: 乐观锁版本。创建时为 1。实际修改后递增。
         brand:
-          type: string
+          type: [string, "null"]
           minLength: 1
-          description: 品牌
+          description: 品牌。草稿阶段未填写时为 null（ADR-035）。
         model:
-          type: string
+          type: [string, "null"]
           minLength: 1
-          description: 车型
+          description: 车型。草稿阶段未填写时为 null（ADR-035）。
         registrationYear:
-          type: integer
-          description: 上牌年份（公元纪年）
+          type: [integer, "null"]
+          description: 上牌年份（公元纪年）。草稿阶段未填写时为 null（ADR-035）。
         mileageKm:
-          type: integer
+          type: [integer, "null"]
           minimum: 0
-          description: 里程（千米）
+          description: 里程（千米）。草稿阶段未填写时为 null（ADR-035）。
         color:
-          type: string
-          description: 颜色
+          type: [string, "null"]
+          description: 颜色。草稿阶段未填写时为 null（ADR-035）。
         conditionDesc:
-          type: string
-          description: 车况描述（整车说明，不是图片说明）
+          type: [string, "null"]
+          description: 车况描述（整车说明，不是图片说明）。草稿阶段未填写时为 null（ADR-035）。
         energyType:
-          $ref: "#/components/schemas/EnergyType"
+          oneOf:
+            - $ref: "#/components/schemas/EnergyType"
+            - type: "null"
+          description: 草稿阶段未填写时为 null（ADR-035）。
         transferCount:
-          type: integer
+          type: [integer, "null"]
           minimum: 0
-          description: 过户次数（手数）
+          description: 过户次数（手数）。草稿阶段未填写时为 null（ADR-035）。
         displacementL:
           type: [number, "null"]
           exclusiveMinimum: 0
@@ -1861,8 +1862,7 @@ components:
         回收站内车辆的只读视图。不含 status——车辆在回收站期间 status 本身不变（ADR-023 正交建模），
         originalStatus 已完整表达"删除前是什么状态"，重复放一个 status 字段只会引起混淆，故省略。
         不含价格字段，价格走 GET /admin/vehicles/{id}/price-records。
-      required: [id, originalStatus, trashedAt, purgeDueAt, purged, version, brand, model,
-                 registrationYear, mileageKm, color, conditionDesc, energyType, transferCount,
+      required: [id, originalStatus, trashedAt, purgeDueAt, purged, version,
                  displacementL, energyConsumption, batteryKwh, vinMasked, createdAt, updatedAt]
       properties:
         id:
@@ -1893,30 +1893,33 @@ components:
           type: boolean
           description: 是否已彻底清除。已清除时本资源仅剩只读展示用途，无法恢复。
         brand:
-          type: string
-          description: 品牌
+          type: [string, "null"]
+          description: 品牌。草稿阶段未填写时为 null（ADR-035）。
         model:
-          type: string
-          description: 车型
+          type: [string, "null"]
+          description: 车型。草稿阶段未填写时为 null（ADR-035）。
         registrationYear:
-          type: integer
-          description: 上牌年份（公元纪年）
+          type: [integer, "null"]
+          description: 上牌年份（公元纪年）。草稿阶段未填写时为 null（ADR-035）。
         mileageKm:
-          type: integer
+          type: [integer, "null"]
           minimum: 0
-          description: 里程（千米）
+          description: 里程（千米）。草稿阶段未填写时为 null（ADR-035）。
         color:
-          type: string
-          description: 颜色
+          type: [string, "null"]
+          description: 颜色。草稿阶段未填写时为 null（ADR-035）。
         conditionDesc:
-          type: string
-          description: 车况描述
+          type: [string, "null"]
+          description: 车况描述。草稿阶段未填写时为 null（ADR-035）。
         energyType:
-          $ref: "#/components/schemas/EnergyType"
+          oneOf:
+            - $ref: "#/components/schemas/EnergyType"
+            - type: "null"
+          description: 草稿阶段未填写时为 null（ADR-035）。
         transferCount:
-          type: integer
+          type: [integer, "null"]
           minimum: 0
-          description: 过户次数（手数）
+          description: 过户次数（手数）。草稿阶段未填写时为 null（ADR-035）。
         displacementL:
           type: [number, "null"]
           exclusiveMinimum: 0
@@ -2554,7 +2557,7 @@ components:
               type: "null"
 
     PriceFrom:
-      description: 记录的变动前值。首次设价为 { type: unset }（显式未填写，不是 0、不是空字符串）。
+      description: "记录的变动前值。首次设价为 { type: unset }（显式未填写，不是 0、不是空字符串）。"
       oneOf:
         - type: object
           additionalProperties: false

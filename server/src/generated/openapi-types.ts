@@ -851,21 +851,22 @@ export interface components {
              * @description 乐观锁版本。创建时为 1。实际修改后递增。
              */
             version: number;
-            /** @description 品牌 */
-            brand: string;
-            /** @description 车型 */
-            model: string;
-            /** @description 上牌年份（公元纪年） */
-            registrationYear: number;
-            /** @description 里程（千米） */
-            mileageKm: number;
-            /** @description 颜色 */
-            color: string;
-            /** @description 车况描述（整车说明，不是图片说明） */
-            conditionDesc: string;
-            energyType: components["schemas"]["EnergyType"];
-            /** @description 过户次数（手数） */
-            transferCount: number;
+            /** @description 品牌。草稿阶段未填写时为 null（ADR-035）。 */
+            brand?: string | null;
+            /** @description 车型。草稿阶段未填写时为 null（ADR-035）。 */
+            model?: string | null;
+            /** @description 上牌年份（公元纪年）。草稿阶段未填写时为 null（ADR-035）。 */
+            registrationYear?: number | null;
+            /** @description 里程（千米）。草稿阶段未填写时为 null（ADR-035）。 */
+            mileageKm?: number | null;
+            /** @description 颜色。草稿阶段未填写时为 null（ADR-035）。 */
+            color?: string | null;
+            /** @description 车况描述（整车说明，不是图片说明）。草稿阶段未填写时为 null（ADR-035）。 */
+            conditionDesc?: string | null;
+            /** @description 草稿阶段未填写时为 null（ADR-035）。 */
+            energyType?: components["schemas"]["EnergyType"] | null;
+            /** @description 过户次数（手数）。草稿阶段未填写时为 null（ADR-035）。 */
+            transferCount?: number | null;
             /** @description 排量（升）。gasoline / phev / range_extender 适用；ev 时为 null。 */
             displacementL: number | null;
             /** @description 电耗。ev / phev / range_extender 适用；gasoline 时为 null。单位本期不枚举。 */
@@ -913,21 +914,22 @@ export interface components {
             purgeDueAt: string;
             /** @description 是否已彻底清除。已清除时本资源仅剩只读展示用途，无法恢复。 */
             purged: boolean;
-            /** @description 品牌 */
-            brand: string;
-            /** @description 车型 */
-            model: string;
-            /** @description 上牌年份（公元纪年） */
-            registrationYear: number;
-            /** @description 里程（千米） */
-            mileageKm: number;
-            /** @description 颜色 */
-            color: string;
-            /** @description 车况描述 */
-            conditionDesc: string;
-            energyType: components["schemas"]["EnergyType"];
-            /** @description 过户次数（手数） */
-            transferCount: number;
+            /** @description 品牌。草稿阶段未填写时为 null（ADR-035）。 */
+            brand?: string | null;
+            /** @description 车型。草稿阶段未填写时为 null（ADR-035）。 */
+            model?: string | null;
+            /** @description 上牌年份（公元纪年）。草稿阶段未填写时为 null（ADR-035）。 */
+            registrationYear?: number | null;
+            /** @description 里程（千米）。草稿阶段未填写时为 null（ADR-035）。 */
+            mileageKm?: number | null;
+            /** @description 颜色。草稿阶段未填写时为 null（ADR-035）。 */
+            color?: string | null;
+            /** @description 车况描述。草稿阶段未填写时为 null（ADR-035）。 */
+            conditionDesc?: string | null;
+            /** @description 草稿阶段未填写时为 null（ADR-035）。 */
+            energyType?: components["schemas"]["EnergyType"] | null;
+            /** @description 过户次数（手数）。草稿阶段未填写时为 null（ADR-035）。 */
+            transferCount?: number | null;
             /** @description 排量（升）。不适用时为 null。 */
             displacementL: number | null;
             /** @description 电耗。不适用时为 null。 */
@@ -1366,7 +1368,7 @@ export interface components {
          * @description 稳定错误码。客户端应按 code 分支，不要解析 message（除已声明为固定文案的码）。
          * @enum {string}
          */
-        ErrorCode: "VEHICLE_NOT_FOUND" | "IMAGE_NOT_FOUND" | "REPORT_NOT_FOUND" | "VEHICLE_VERSION_CONFLICT" | "ILLEGAL_STATUS_TRANSITION" | "PUBLISHED_IMAGE_MIN" | "IDEMPOTENCY_KEY_CONFLICT" | "PUBLISH_PRECONDITION_FAILED" | "VALIDATION_ERROR" | "MISSING_VERSION" | "IDEMPOTENCY_KEY_REQUIRED" | "INVALID_OBJECT_KEY" | "INVALID_CONTENT_TYPE" | "FILE_TOO_LARGE" | "IMAGE_ORDER_MISMATCH" | "OBJECT_NOT_UPLOADED" | "UNAUTHORIZED" | "INTERNAL_ERROR" | "RECYCLE_BIN_ITEM_PURGED" | "VEHICLE_NOT_IN_RECYCLE_BIN" | "VEHICLE_IN_RECYCLE_BIN" | "FORBIDDEN" | "MUST_CHANGE_PASSWORD" | "INVALID_CREDENTIALS" | "ACCOUNT_DISABLED" | "ACCOUNT_LOCKED" | "ACCOUNT_LOGIN_NAME_TAKEN" | "CANNOT_DISABLE_SELF" | "LAST_SUPER_ADMIN";
+        ErrorCode: "VEHICLE_NOT_FOUND" | "IMAGE_NOT_FOUND" | "REPORT_NOT_FOUND" | "VEHICLE_VERSION_CONFLICT" | "ILLEGAL_STATUS_TRANSITION" | "PUBLISHED_IMAGE_MIN" | "IDEMPOTENCY_KEY_CONFLICT" | "PUBLISH_PRECONDITION_FAILED" | "VALIDATION_ERROR" | "MISSING_VERSION" | "IDEMPOTENCY_KEY_REQUIRED" | "INVALID_OBJECT_KEY" | "INVALID_CONTENT_TYPE" | "FILE_TOO_LARGE" | "IMAGE_ORDER_MISMATCH" | "OBJECT_NOT_UPLOADED" | "UNAUTHORIZED" | "INTERNAL_ERROR" | "RECYCLE_BIN_ITEM_PURGED" | "VEHICLE_NOT_IN_RECYCLE_BIN" | "VEHICLE_IN_RECYCLE_BIN" | "FORBIDDEN" | "MUST_CHANGE_PASSWORD" | "INVALID_CREDENTIALS" | "ACCOUNT_DISABLED" | "ACCOUNT_LOCKED" | "ACCOUNT_LOGIN_NAME_TAKEN" | "CANNOT_DISABLE_SELF" | "LAST_SUPER_ADMIN" | "TOO_MANY_REQUESTS" | "VEHICLE_VIN_DUPLICATE";
         ErrorResponse: {
             code: components["schemas"]["ErrorCode"];
             /** @description 面向调用方的说明。VEHICLE_VERSION_CONFLICT、PUBLISHED_IMAGE_MIN 的 message 固定，不得改写。 */
@@ -1428,7 +1430,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description 冲突（VEHICLE_VERSION_CONFLICT / IDEMPOTENCY_KEY_CONFLICT / ILLEGAL_STATUS_TRANSITION / PUBLISHED_IMAGE_MIN） */
+        /** @description 冲突（VEHICLE_VERSION_CONFLICT / IDEMPOTENCY_KEY_CONFLICT / ILLEGAL_STATUS_TRANSITION / PUBLISHED_IMAGE_MIN / VEHICLE_VIN_DUPLICATE） */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -1447,6 +1449,27 @@ export interface components {
                  * @example {
                  *       "code": "INTERNAL_ERROR",
                  *       "message": "服务内部错误",
+                 *       "details": {}
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /**
+         * @description IP 级限流触发，窗口与阈值随接口而定（见对应接口 description）：
+         *     公开只读接口（GET /public/*）窗口 60 秒、阈值 1000 次/IP；
+         *     POST /admin/auth/login 另有独立的 IP 级限流（F-006，ADR-103），
+         *     与账号级锁定（ACCOUNT_LOCKED）是两层独立防线，IP 限流检查在前。
+         */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "TOO_MANY_REQUESTS",
+                 *       "message": "请求过于频繁，请稍后再试",
                  *       "details": {}
                  *     }
                  */
@@ -1936,6 +1959,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1961,6 +1985,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["VehicleNotFound"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2436,6 +2461,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["VehicleNotFound"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2461,6 +2487,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["VehicleNotFound"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2591,6 +2618,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["VehicleNotFound"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2622,6 +2650,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["VehicleNotFound"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2662,6 +2691,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
     };
