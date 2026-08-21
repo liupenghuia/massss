@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { AccountsPage } from "./pages/AccountsPage";
@@ -25,6 +25,14 @@ function AuthedLayout() {
   return <AdminLayout />;
 }
 
+/** F-006：账号页仅超管；普通管理员直链进入则回车辆列表 */
+function SuperAdminOnly({ children }: { children: ReactNode }) {
+  const { session } = useSession();
+  if (!session) return <Navigate to="/login" replace />;
+  if (session.role !== "super_admin") return <Navigate to="/vehicles" replace />;
+  return children;
+}
+
 function RootRedirect() {
   const { session } = useSession();
   if (!session) return <Navigate to="/login" replace />;
@@ -45,13 +53,26 @@ export default function App() {
             <Route
               path="/vehicles"
               element={
-                <Suspense fallback={<p>加载中…</p>}>
+                <Suspense
+                  fallback={
+                    <p className="page-sub" role="status" aria-live="polite">
+                      加载中…
+                    </p>
+                  }
+                >
                   <VehiclesPanel />
                 </Suspense>
               }
             />
             <Route path="/recycle" element={<RecyclePanel />} />
-            <Route path="/accounts" element={<AccountsPage />} />
+            <Route
+              path="/accounts"
+              element={
+                <SuperAdminOnly>
+                  <AccountsPage />
+                </SuperAdminOnly>
+              }
+            />
           </Route>
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<RootRedirect />} />
