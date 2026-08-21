@@ -140,7 +140,7 @@ export function RecyclePanel() {
       {!loading && items.length === 0 ? (
         <div className="empty-card">
           <div className="empty-blob" />
-          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>
+          <div className="empty-card-title">
             {keyword.trim() ? "没有匹配的回收站车辆" : "回收站是空的"}
           </div>
           <p className="page-sub">

@@ -79,9 +79,9 @@ export function VehicleList({
         ) : null}
 
         {!loading && total === 0 && !error ? (
-          <div className="empty-card" style={{ marginTop: 24 }}>
+          <div className="empty-card">
             <div className="empty-blob" />
-            <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>
+            <div className="empty-card-title">
               {filtered ? "没有符合条件的车辆" : "暂无在售车辆"}
             </div>
             <p className="page-sub">

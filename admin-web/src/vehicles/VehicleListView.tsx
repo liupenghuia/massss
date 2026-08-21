@@ -91,7 +91,7 @@ export function VehicleListView(p: VehicleListViewProps) {
       {!p.listLoading && p.items.length === 0 ? (
         <div className="empty-card">
           <div className="empty-blob" />
-          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>
+          <div className="empty-card-title">
             {hasFilters ? "没有符合条件的车辆" : "暂无车辆"}
           </div>
           <p className="page-sub">

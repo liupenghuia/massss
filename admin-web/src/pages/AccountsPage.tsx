@@ -223,7 +223,7 @@ export function AccountsPage() {
           {!loading && accounts.length === 0 ? (
             <div className="empty-card">
               <div className="empty-blob" />
-              <div style={{ fontFamily: "var(--font-heading)", fontSize: 20 }}>暂无其他账号</div>
+              <div className="empty-card-title">暂无其他账号</div>
               <p className="page-sub">使用上方表单创建第一个管理员。</p>
             </div>
           ) : null}
