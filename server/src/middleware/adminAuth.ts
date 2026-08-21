@@ -54,9 +54,11 @@ export async function adminAuth(req: Request, _res: Response, next: NextFunction
 
     await touchSession(token);
 
-    req.operatorId = account.id;
+    // pg 对 BIGINT 常返回 string；统一 Number，避免 4 === "4" 导致自操作校验失效（ADR-109）
+    const accountId = Number(account.id);
+    req.operatorId = accountId;
     req.authAccount = {
-      id: account.id,
+      id: accountId,
       loginName: account.login_name,
       role: account.role,
       mustChangePassword: account.must_change_password,

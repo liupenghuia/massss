@@ -16,6 +16,11 @@ export type AccountRow = {
   updated_at: Date;
 };
 
+/** pg BIGINT 可能是 string，读出后归一为 number。 */
+function normalizeAccountRow(row: AccountRow): AccountRow {
+  return { ...row, id: Number(row.id) };
+}
+
 export function toAdminAccount(row: AccountRow) {
   return {
     id: Number(row.id),
@@ -30,12 +35,12 @@ export function toAdminAccount(row: AccountRow) {
 
 export async function findAccountByLoginName(loginName: string): Promise<AccountRow | null> {
   const r = await pool.query<AccountRow>(`SELECT * FROM accounts WHERE login_name = $1`, [loginName]);
-  return r.rows[0] ?? null;
+  return r.rows[0] ? normalizeAccountRow(r.rows[0]) : null;
 }
 
 export async function findAccountById(id: number): Promise<AccountRow | null> {
   const r = await pool.query<AccountRow>(`SELECT * FROM accounts WHERE id = $1`, [id]);
-  return r.rows[0] ?? null;
+  return r.rows[0] ? normalizeAccountRow(r.rows[0]) : null;
 }
 
 export async function countAccounts(): Promise<number> {
@@ -52,7 +57,7 @@ export async function insertAccount(
      RETURNING *`,
     [params.loginName, params.passwordHash, params.role, params.mustChangePassword]
   );
-  return r.rows[0];
+  return normalizeAccountRow(r.rows[0]);
 }
 
 export async function listAccounts(page: number, pageSize: number): Promise<{ rows: AccountRow[]; total: number }> {
@@ -62,7 +67,7 @@ export async function listAccounts(page: number, pageSize: number): Promise<{ ro
     `SELECT * FROM accounts ORDER BY id ASC LIMIT $1 OFFSET $2`,
     [pageSize, (page - 1) * pageSize]
   );
-  return { rows: r.rows, total };
+  return { rows: r.rows.map(normalizeAccountRow), total };
 }
 
 export async function recordLoginFailure(id: number): Promise<AccountRow> {
@@ -75,7 +80,7 @@ export async function recordLoginFailure(id: number): Promise<AccountRow> {
      RETURNING *`,
     [id]
   );
-  return r.rows[0];
+  return normalizeAccountRow(r.rows[0]);
 }
 
 export async function recordLoginSuccess(id: number): Promise<void> {
@@ -109,7 +114,7 @@ export async function setAccountEnabled(client: PoolClient, id: number, enabled:
         `UPDATE accounts SET enabled = FALSE, updated_at = now() WHERE id = $1 RETURNING *`,
         [id]
       );
-  return r.rows[0];
+  return normalizeAccountRow(r.rows[0]);
 }
 
 export async function setAccountRole(id: number, role: AccountRole): Promise<AccountRow> {
@@ -117,7 +122,7 @@ export async function setAccountRole(id: number, role: AccountRole): Promise<Acc
     `UPDATE accounts SET role = $2, updated_at = now() WHERE id = $1 RETURNING *`,
     [id, role]
   );
-  return r.rows[0];
+  return normalizeAccountRow(r.rows[0]);
 }
 
 export async function countActiveSuperAdmins(client?: PoolClient): Promise<number> {
