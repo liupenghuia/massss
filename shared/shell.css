@@ -286,13 +286,35 @@ img.vehicle-card-cover {
   gap: 16px;
 }
 
+.media-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.media-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.media-section-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 19px;
+  font-weight: var(--font-heading-weight);
+}
+
 .thumb-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
-.thumb-grid > * {
+.thumb-item {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -305,12 +327,48 @@ img.vehicle-card-cover {
   border-radius: var(--radius-md);
   overflow: hidden;
   position: relative;
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+  touch-action: none;
+}
+
+.thumb:active {
+  cursor: grabbing;
+}
+
+.thumb-dragging {
+  transform: rotate(-3deg) scale(1.02);
+  box-shadow: var(--shadow-md);
+  outline: 2px dashed var(--color-accent);
+  outline-offset: 2px;
+  z-index: 2;
+  opacity: 0.95;
+}
+
+.thumb-drop-target {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.thumb-drag-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-neutral-900) 35%, transparent);
+  color: var(--color-neutral-100);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
 }
 
 .thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none;
+  user-select: none;
 }
 
 .thumb-fallback {
@@ -330,6 +388,22 @@ img.vehicle-card-cover {
   z-index: 1;
   background: var(--color-accent);
   color: var(--color-neutral-100);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.input-caption {
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.btn-thumb-del {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
 .dropzone {
@@ -347,6 +421,23 @@ img.vehicle-card-cover {
   cursor: pointer;
   position: relative;
   line-height: 1.4;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone:hover,
+.dropzone:focus-within {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.dropzone-hot {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
+.dropzone-sub {
+  font-size: 11px;
+  color: var(--color-neutral-600);
 }
 
 .dropzone-pill {
@@ -356,6 +447,39 @@ img.vehicle-card-cover {
   display: inline-flex;
   width: auto;
   min-height: 40px;
+}
+
+.report-row-bar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.report-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-accent-2-200);
+  color: var(--color-accent-2-800);
+  border-radius: 999px;
+  padding: 8px 8px 8px 18px;
+  font-size: 13px;
+}
+
+.report-chip-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.report-chip-link:hover {
+  text-decoration: underline;
+}
+
+.btn-chip-del {
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
 }
 
 .link-chip {

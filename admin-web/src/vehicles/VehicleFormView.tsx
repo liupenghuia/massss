@@ -1,4 +1,4 @@
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { formatPrice, statusTag, ThumbPreview } from "./helpers";
 import {
   STATUS_LABEL,
@@ -85,6 +85,10 @@ export function VehicleFormView({
   onDropReorder,
 }: VehicleFormViewProps) {
   const energy = editing ? editing.energyType : form.energyType;
+  const [dropTargetId, setDropTargetId] = useState<number | null>(null);
+  const [dropzoneHot, setDropzoneHot] = useState(false);
+  const imageCount = images.length;
+  const needMore = Math.max(0, 4 - imageCount);
 
     return (
       <div>
@@ -394,58 +398,110 @@ export function VehicleFormView({
 
             {editing ? (
               <>
-                <div style={{ marginTop: 24 }}>
-                  <div className="form-head" style={{ marginBottom: 0 }}>
-                    <h3 style={{ margin: 0 }}>车辆图片</h3>
-                    <span className="page-sub">拖拽排序 · 第一张为封面 · 上架至少 4 张</span>
+                <section className="media-section" aria-labelledby="vehicle-images-heading">
+                  <div className="media-section-head">
+                    <h3 id="vehicle-images-heading" className="media-section-title">
+                      车辆图片
+                    </h3>
+                    <span className="page-sub">
+                      拖拽排序 · 第一张为封面 · 上架至少 4 张
+                      {imageCount > 0 ? ` · 已有 ${imageCount} 张` : ""}
+                      {needMore > 0 ? ` · 还差 ${needMore} 张` : ""}
+                    </span>
                   </div>
-                  <div className="thumb-grid" style={{ marginTop: 12 }}>
-                    {images.map((img, i) => (
-                      <div key={img.id}>
-                        <div
-                          className="thumb"
-                          draggable
-                          onDragStart={() => setDragId(img.id)}
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={() => void onDropReorder(img.id)}
-                          style={dragId === img.id ? { outline: "2px dashed var(--color-accent)" } : undefined}
-                        >
-                          <ThumbPreview src={img.url} alt={img.caption || `图片 ${i + 1}`} />
-                          {i === 0 ? <span className="tag thumb-cover">封面</span> : null}
+                  <div className="thumb-grid">
+                    {images.map((img, i) => {
+                      const dragging = dragId === img.id;
+                      const dropOver = dropTargetId === img.id && dragId != null && dragId !== img.id;
+                      return (
+                        <div key={img.id} className="thumb-item">
+                          <div
+                            className={
+                              dragging ? "thumb thumb-dragging" : dropOver ? "thumb thumb-drop-target" : "thumb"
+                            }
+                            draggable
+                            onDragStart={(e) => {
+                              setDragId(img.id);
+                              e.dataTransfer.effectAllowed = "move";
+                              try {
+                                e.dataTransfer.setData("text/plain", String(img.id));
+                              } catch {
+                                /* ignore */
+                              }
+                            }}
+                            onDragEnd={() => {
+                              setDragId(null);
+                              setDropTargetId(null);
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = "move";
+                              setDropTargetId(img.id);
+                            }}
+                            onDragLeave={() => {
+                              setDropTargetId((cur) => (cur === img.id ? null : cur));
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              setDropTargetId(null);
+                              void onDropReorder(img.id);
+                            }}
+                            role="listitem"
+                            aria-grabbed={dragging}
+                            aria-label={`图片 ${i + 1}${i === 0 ? "（封面）" : ""}，拖拽可排序`}
+                          >
+                            <ThumbPreview src={img.url} alt={img.caption || `图片 ${i + 1}`} />
+                            {i === 0 ? <span className="tag thumb-cover">封面</span> : null}
+                            {dragging ? <span className="thumb-drag-hint">拖动中</span> : null}
+                          </div>
+                          <input
+                            className="input input-caption"
+                            value={img.caption}
+                            placeholder="图片说明"
+                            maxLength={200}
+                            onChange={(e) =>
+                              setImages((prev) =>
+                                prev.map((x) => (x.id === img.id ? { ...x, caption: e.target.value } : x)),
+                              )
+                            }
+                            onBlur={(e) => void onSaveCaption(img.id, e.target.value)}
+                            aria-label={`图片 ${i + 1} 说明`}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-thumb-del"
+                            onClick={() => void onDeleteImage(img.id)}
+                          >
+                            删除
+                          </button>
                         </div>
-                        <input
-                          className="input"
-                          value={img.caption}
-                          placeholder="图片说明"
-                          maxLength={200}
-                          onChange={(e) =>
-                            setImages((prev) => prev.map((x) => (x.id === img.id ? { ...x, caption: e.target.value } : x)))
-                          }
-                          onBlur={(e) => void onSaveCaption(img.id, e.target.value)}
-                          style={{ marginTop: 6, padding: "6px 12px" }}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          style={{ marginTop: 6, width: "100%" }}
-                          onClick={() => void onDeleteImage(img.id)}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    ))}
-                    <div>
+                      );
+                    })}
+                    <div className="thumb-item">
                       <label
-                        className="dropzone"
+                        className={dropzoneHot ? "dropzone dropzone-hot" : "dropzone"}
                         htmlFor="vehicle-image-files"
-                        onDragOver={(e) => e.preventDefault()}
+                        onDragEnter={(e) => {
+                          e.preventDefault();
+                          setDropzoneHot(true);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDropzoneHot(true);
+                        }}
+                        onDragLeave={() => setDropzoneHot(false)}
                         onDrop={(e) => {
                           e.preventDefault();
-                          const files = Array.from(e.dataTransfer.files);
+                          setDropzoneHot(false);
+                          const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
                           if (files.length) void onUploadImages(files);
                         }}
                       >
-                        拖拽图片到此处上传
+                        <span>
+                          拖拽图片到此处上传
+                          <br />
+                          <span className="dropzone-sub">或点击选择 · JPG/PNG/WebP</span>
+                        </span>
                         <input
                           id="vehicle-image-files"
                           className="visually-hidden"
@@ -473,17 +529,27 @@ export function VehicleFormView({
                       </div>
                     </div>
                   </div>
-                </div>
+                  {imageCount > 0 && imageCount < 4 ? (
+                    <p className="banner banner-warn" role="status" style={{ marginTop: 12 }}>
+                      当前 {imageCount} 张，发布前至少需要 4 张图片。
+                    </p>
+                  ) : null}
+                </section>
 
-                <div style={{ marginTop: 24 }}>
-                  <h3>评估报告</h3>
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <section className="media-section" aria-labelledby="vehicle-reports-heading">
+                  <div className="media-section-head">
+                    <h3 id="vehicle-reports-heading" className="media-section-title">
+                      评估报告
+                    </h3>
+                    <span className="page-sub">{reports.length > 0 ? `${reports.length} 份` : "可选"}</span>
+                  </div>
+                  <div className="report-row-bar">
                     {reports.map((r) => (
-                      <div key={r.id} className="banner banner-ok" style={{ display: "flex", alignItems: "center", gap: 12, borderRadius: 999 }}>
-                        <a href={r.url} target="_blank" rel="noreferrer">
-                          {r.contentType} · {(r.byteSize / 1024).toFixed(0)} KB
+                      <div key={r.id} className="report-chip">
+                        <a href={r.url} target="_blank" rel="noreferrer" className="report-chip-link">
+                          {r.contentType.split("/").pop()?.toUpperCase() || "FILE"} · {(r.byteSize / 1024).toFixed(0)} KB
                         </a>
-                        <button type="button" className="btn btn-ghost" onClick={() => void onDeleteReport(r.id)}>
+                        <button type="button" className="btn btn-ghost btn-chip-del" onClick={() => void onDeleteReport(r.id)}>
                           删除
                         </button>
                       </div>
@@ -525,7 +591,7 @@ export function VehicleFormView({
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               </>
             ) : null}
 
