@@ -23,7 +23,7 @@ export function VehicleCard({ vehicle }: { vehicle: Summary }) {
           e.preventDefault();
           go(`/vehicles/${vehicle.id}`);
         }}
-        style={{ color: "inherit", textDecoration: "none", display: "block" }}
+        className="link-reset"
       >
         <SmartImage
           src={vehicle.coverImageUrl}

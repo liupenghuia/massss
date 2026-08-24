@@ -21,6 +21,7 @@ export default function App() {
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [price, setPrice] = useState<PriceValue | null>(null);
   const [records, setRecords] = useState<PriceRecord[]>([]);
+  const [priceRecordTotal, setPriceRecordTotal] = useState(0);
 
   useEffect(() => {
     const onPop = () => setRoute(parseRoute());
@@ -40,15 +41,18 @@ export default function App() {
       const res = await fetch(`/public/vehicles?${qs}`);
       const body = await res.json();
       if (!res.ok) {
-        setError("加载失败，请重试");
+        setError("服务暂时不可用，请稍后重试");
         setItems([]);
         return;
       }
       setItems(body.items);
       setTotal(body.total);
       setPage(nextPage);
+      if (body.total === 0) {
+        setError("没有符合条件的车辆，试试清空或更换筛选");
+      }
     } catch {
-      setError("加载失败，请重试");
+      setError("网络断开，请检查连接后重试");
     } finally {
       setLoading(false);
     }
@@ -93,15 +97,16 @@ export default function App() {
         setPrice(p.current ?? null);
         const reps = rRes.ok ? await rRes.json() : { items: [] };
         setReports(reps.items ?? []);
-        const rec = recRes.ok ? await recRes.json() : { items: [] };
+        const rec = recRes.ok ? await recRes.json() : { items: [], total: 0 };
         setRecords(rec.items ?? []);
+        setPriceRecordTotal(typeof rec.total === "number" ? rec.total : (rec.items ?? []).length);
         document.title = `${d.brand} ${d.model}`;
         setMeta("og:title", `${d.brand} ${d.model}`);
         setMeta("og:description", `${d.registrationYear}年 ${d.mileageKm}公里 ${d.color}`);
         const cover = (iRes.ok ? imgs.items : [])[0]?.url;
         if (cover) setMeta("og:image", cover);
       } catch {
-        setError("加载失败，请重试");
+        setError("网络断开，请检查连接后重试");
       } finally {
         setLoading(false);
       }
@@ -125,7 +130,14 @@ export default function App() {
 
   if (route.kind === "detail" && detail) {
     return (
-      <VehicleDetail detail={detail} images={images} reports={reports} price={price} records={records} />
+      <VehicleDetail
+        detail={detail}
+        images={images}
+        reports={reports}
+        price={price}
+        records={records}
+        priceRecordTotal={priceRecordTotal}
+      />
     );
   }
 

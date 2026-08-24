@@ -108,8 +108,7 @@ export function Gallery({ images, title, intro, footer }: Props) {
       {count > 0 ? (
         <button
           type="button"
-          className="public-hero"
-          style={{ width: "100%", border: 0, padding: 16 }}
+          className="public-hero public-hero-hit"
           onClick={() => current && setLightbox(true)}
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
@@ -118,7 +117,7 @@ export function Gallery({ images, title, intro, footer }: Props) {
           {current ? (
             <SmartImage src={current.url} alt={current.caption || title} priority className="public-hero-img" />
           ) : null}
-          <span className="tag tag-neutral" style={{ position: "relative", zIndex: 1 }}>
+          <span className="tag tag-neutral lightbox-chip">
             {active + 1} / {count}
           </span>
         </button>

@@ -44,7 +44,7 @@ export function VehicleList({
         <h1 className="public-list-title" id="public-list-heading">
           在售车辆
         </h1>
-        <div style={{ marginTop: 16 }}>
+        <div className="stack-gap">
           <FilterForm
             filters={filters}
             onChange={onFiltersChange}
@@ -57,8 +57,8 @@ export function VehicleList({
         </div>
 
         {error ? (
-          <div className="banner banner-warn" style={{ marginTop: 16 }} role="alert">
-            <p style={{ margin: 0 }}>{error}</p>
+          <div className="banner banner-warn stack-gap" role="alert">
+            <p className="tight-lead">{error}</p>
             <Button variant="secondary" type="button" onClick={onRetry}>
               重试
             </Button>
@@ -68,12 +68,12 @@ export function VehicleList({
         {loading && items.length === 0 ? (
           <div className="public-list-stack" aria-busy="true" aria-label="加载中">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="card elev-sm" style={{ overflow: "hidden", padding: 0 }}>
+              <div key={i} className="card elev-sm skel-block">
                 <div className="skeleton-block" />
-                <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div className="skeleton-line" style={{ width: "60%" }} />
-                  <div className="skeleton-line" style={{ width: "80%" }} />
-                  <div className="skeleton-line" style={{ width: "40%" }} />
+                <div className="skel-body">
+                  <div className="skeleton-line skel-w-60" />
+                  <div className="skeleton-line skel-w-80" />
+                  <div className="skeleton-line skel-w-40" />
                 </div>
               </div>
             ))}

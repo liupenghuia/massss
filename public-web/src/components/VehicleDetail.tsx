@@ -13,6 +13,7 @@ type Props = {
   reports: ReportItem[];
   price: PriceValue | null;
   records: PriceRecord[];
+  priceRecordTotal: number;
 };
 
 /** F-002：null / 空字符串隐藏整行；数字 0 保留 */
@@ -35,11 +36,11 @@ function reportLabel(url: string): string {
   }
 }
 
-export function VehicleDetail({ detail, images, reports, price, records }: Props) {
+export function VehicleDetail({ detail, images, reports, price, records, priceRecordTotal }: Props) {
   const title = `${detail.brand} ${detail.model}`.trim() || "车辆详情";
   return (
     <div className="shell">
-      <div className="public-phone" style={{ paddingBottom: 0 }}>
+      <div className="public-phone public-hero-pad">
         <SiteHeader />
       </div>
       <Gallery
@@ -116,6 +117,9 @@ export function VehicleDetail({ detail, images, reports, price, records }: Props
                       <span className="page-sub">{r.createdAt.slice(0, 10)}</span>
                     </div>
                   ))}
+                  {priceRecordTotal > records.length ? (
+                    <p className="page-sub">仅显示最近 {records.length} 条</p>
+                  ) : null}
                 </div>
               )}
             </section>
