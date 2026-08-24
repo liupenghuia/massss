@@ -164,8 +164,12 @@ export async function listRecycleBin(
   const conditions = ["trashed_at IS NOT NULL", "purged = FALSE"];
   const values: unknown[] = [];
   if (params.keyword) {
+    // ADR-090：搜索字段范围与在管列表（listVehicles）保持一致，含 VIN 后六位（ADR-037）。
     values.push(`%${params.keyword}%`);
-    conditions.push(`(brand ILIKE $${values.length} OR model ILIKE $${values.length})`);
+    const likeIdx = values.length;
+    values.push(`%${params.keyword}%`);
+    const vinIdx = values.length;
+    conditions.push(`(brand ILIKE $${likeIdx} OR model ILIKE $${likeIdx} OR RIGHT(vin, 6) ILIKE $${vinIdx})`);
   }
   const where = `WHERE ${conditions.join(" AND ")}`;
   const totalResult = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM vehicles ${where}`, values);
