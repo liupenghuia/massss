@@ -1,5 +1,7 @@
 import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
+import { Field } from "../ui/Field";
 import { formatPrice, statusTag, ThumbPreview } from "./helpers";
+import { currentMaxYear, mileageError, transferError, yearError } from "./validate";
 import {
   STATUS_LABEL,
   type AdminVehicle,
@@ -15,9 +17,10 @@ export type VehicleFormViewProps = {
   editing: AdminVehicle | null;
   form: VehicleFormState;
   setForm: Dispatch<SetStateAction<VehicleFormState>>;
-  setSelected: Dispatch<SetStateAction<AdminVehicle | null>>;
   error: string;
   info: string;
+  onDismissError: () => void;
+  onDismissInfo: () => void;
   formBusy: boolean;
   publicOrigin: string;
   price: PriceValue | null;
@@ -46,15 +49,18 @@ export type VehicleFormViewProps = {
   onDeleteReport: (id: number) => void;
   onSaveCaption: (id: number, caption: string) => void;
   onDropReorder: (targetId: number) => void;
+  onSetCover: (id: number) => void;
+  onMoveImage: (id: number, dir: -1 | 1) => void;
 };
 
 export function VehicleFormView({
   editing,
   form,
   setForm,
-  setSelected,
   error,
   info,
+  onDismissError,
+  onDismissInfo,
   formBusy,
   publicOrigin,
   price,
@@ -83,29 +89,49 @@ export function VehicleFormView({
   onDeleteReport,
   onSaveCaption,
   onDropReorder,
+  onSetCover,
+  onMoveImage,
 }: VehicleFormViewProps) {
-  const energy = editing ? editing.energyType : form.energyType;
+  const energy = form.energyType;
   const [dropTargetId, setDropTargetId] = useState<number | null>(null);
   const [dropzoneHot, setDropzoneHot] = useState(false);
+  const [moveLive, setMoveLive] = useState("");
   const imageCount = images.length;
   const needMore = Math.max(0, 4 - imageCount);
+  const maxYear = currentMaxYear();
+  const yearVal = form.registrationYear;
+  const mileageVal = form.mileageKm;
+  const transferVal = form.transferCount;
+
+  function patchForm<K extends keyof VehicleFormState>(key: K, value: VehicleFormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
 
     return (
       <div>
         {error ? (
           <p className="banner banner-warn" role="alert">
-            {error}
+            <span>{error}</span>
+            <button type="button" className="banner-dismiss" onClick={onDismissError} aria-label="关闭提示">
+              ×
+            </button>
           </p>
         ) : null}
         {info ? (
           <p className="banner banner-ok" role="status">
-            {info}
+            <span>{info}</span>
+            <button type="button" className="banner-dismiss" onClick={onDismissInfo} aria-label="关闭提示">
+              ×
+            </button>
           </p>
         ) : null}
         <div className="edit-split">
           <form onSubmit={editing ? (e) => { e.preventDefault(); void onSave(); } : (e) => onCreate(e)}>
             <div className="form-head">
-              <h2 className="form-head-title">{editing ? `编辑 #${editing.id}` : "新建车辆"}</h2>
+              <h2 className="form-head-title">
+                {editing ? `编辑 #${editing.id}` : "新建车辆"}
+                <span className="page-sub"> · 步骤 {editing ? "2" : "1"} / 2</span>
+              </h2>
               {editing ? <span className={statusTag(editing.status)}>{STATUS_LABEL[editing.status]}</span> : null}
               {editing ? <span className="page-sub">v{editing.version}</span> : null}
               {formBusy ? (
@@ -118,82 +144,54 @@ export function VehicleFormView({
               </button>
             </div>
 
+            {!editing ? (
+              <p className="page-sub form-step-note">
+                先填基本信息并创建，创建后即可上传图片与报告。
+              </p>
+            ) : null}
+
             <div className="form-grid-3">
-              <label className="field">
-                <span>品牌</span>
-                <input
-                  className="input"
-                  value={editing ? editing.brand : form.brand}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, brand: e.target.value })
-                      : setForm({ ...form, brand: e.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>车型</span>
-                <input
-                  className="input"
-                  value={editing ? editing.model : form.model}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, model: e.target.value })
-                      : setForm({ ...form, model: e.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>上牌年</span>
+              <Field label="品牌" suggested>
+                <input className="input" value={form.brand} onChange={(e) => patchForm("brand", e.target.value)} />
+              </Field>
+              <Field label="车型" suggested>
+                <input className="input" value={form.model} onChange={(e) => patchForm("model", e.target.value)} />
+              </Field>
+              <Field label="上牌年" error={yearError(Number(yearVal))}>
                 <input
                   className="input"
                   type="number"
-                  value={editing ? editing.registrationYear : form.registrationYear}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, registrationYear: Number(e.target.value) })
-                      : setForm({ ...form, registrationYear: Number(e.target.value) })
-                  }
+                  min={1980}
+                  max={maxYear}
+                  step={1}
+                  value={yearVal}
+                  onChange={(e) => patchForm("registrationYear", Number(e.target.value))}
                 />
-              </label>
-              <label className="field">
-                <span>里程（公里）</span>
+              </Field>
+              <Field label="里程（公里）" error={mileageError(Number(mileageVal))}>
                 <input
                   className="input"
                   type="number"
-                  value={editing ? editing.mileageKm : form.mileageKm}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, mileageKm: Number(e.target.value) })
-                      : setForm({ ...form, mileageKm: Number(e.target.value) })
-                  }
+                  min={0}
+                  step={100}
+                  value={mileageVal}
+                  onChange={(e) => patchForm("mileageKm", Number(e.target.value))}
                 />
-              </label>
-              <label className="field">
-                <span>颜色</span>
-                <input
-                  className="input"
-                  value={editing ? editing.color : form.color}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, color: e.target.value })
-                      : setForm({ ...form, color: e.target.value })
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>过户次数</span>
+              </Field>
+              <Field label="颜色">
+                <input className="input" value={form.color} onChange={(e) => patchForm("color", e.target.value)} />
+              </Field>
+              <Field label="过户次数" error={transferError(Number(transferVal))}>
                 <input
                   className="input"
                   type="number"
-                  value={editing ? editing.transferCount : form.transferCount}
-                  onChange={(e) =>
-                    editing
-                      ? setSelected({ ...editing, transferCount: Number(e.target.value) })
-                      : setForm({ ...form, transferCount: Number(e.target.value) })
-                  }
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={transferVal}
+                  onChange={(e) => patchForm("transferCount", Number(e.target.value))}
                 />
-              </label>
+              </Field>
             </div>
 
             <div className="form-block">
@@ -212,11 +210,7 @@ export function VehicleFormView({
                     type="button"
                     className="seg-opt"
                     aria-pressed={energy === value}
-                    onClick={() =>
-                      editing
-                        ? setSelected({ ...editing, energyType: value })
-                        : setForm({ ...form, energyType: value })
-                    }
+                    onClick={() => patchForm("energyType", value)}
                   >
                     {label}
                   </button>
@@ -228,12 +222,8 @@ export function VehicleFormView({
                     <span>排量（升）</span>
                     <input
                       className="input"
-                      value={editing ? String(editing.displacementL ?? "") : form.displacementL}
-                      onChange={(e) =>
-                        editing
-                          ? setSelected({ ...editing, displacementL: e.target.value ? Number(e.target.value) : null })
-                          : setForm({ ...form, displacementL: e.target.value })
-                      }
+                      value={form.displacementL}
+                      onChange={(e) => patchForm("displacementL", e.target.value)}
                     />
                   </label>
                 ) : (
@@ -248,27 +238,16 @@ export function VehicleFormView({
                       <span>电耗</span>
                       <input
                         className="input"
-                        value={editing ? String(editing.energyConsumption ?? "") : form.energyConsumption}
-                        onChange={(e) =>
-                          editing
-                            ? setSelected({
-                                ...editing,
-                                energyConsumption: e.target.value ? Number(e.target.value) : null,
-                              })
-                            : setForm({ ...form, energyConsumption: e.target.value })
-                        }
+                        value={form.energyConsumption}
+                        onChange={(e) => patchForm("energyConsumption", e.target.value)}
                       />
                     </label>
                     <label className="field">
                       <span>电池 kWh</span>
                       <input
                         className="input"
-                        value={editing ? String(editing.batteryKwh ?? "") : form.batteryKwh}
-                        onChange={(e) =>
-                          editing
-                            ? setSelected({ ...editing, batteryKwh: e.target.value ? Number(e.target.value) : null })
-                            : setForm({ ...form, batteryKwh: e.target.value })
-                        }
+                        value={form.batteryKwh}
+                        onChange={(e) => patchForm("batteryKwh", e.target.value)}
                       />
                     </label>
                   </>
@@ -293,18 +272,16 @@ export function VehicleFormView({
                 className="input"
                 rows={3}
                 maxLength={500}
-                value={editing ? editing.conditionDesc : form.conditionDesc}
-                onChange={(e) =>
-                  editing
-                    ? setSelected({ ...editing, conditionDesc: e.target.value })
-                    : setForm({ ...form, conditionDesc: e.target.value })
-                }
+                value={form.conditionDesc}
+                onChange={(e) => patchForm("conditionDesc", e.target.value)}
               />
             </label>
 
             <div className="form-block price-vin-row">
-              <label className="field field-fixed">
-                <span>VIN</span>
+              <Field
+                label="VIN"
+                hint={editing ? "VIN 创建后不可修改" : undefined}
+              >
                 <input
                   className="input"
                   value={editing ? (editing.vinMasked ?? "") : form.vin}
@@ -315,7 +292,7 @@ export function VehicleFormView({
                   readOnly={Boolean(editing)}
                   aria-readonly={Boolean(editing)}
                 />
-              </label>
+              </Field>
               {!editing ? (
                 <div className="price-field">
                   <span className="field-label">初始价格</span>
@@ -396,11 +373,14 @@ export function VehicleFormView({
                       车辆图片
                     </h3>
                     <span className="page-sub">
-                      拖拽排序 · 第一张为封面 · 上架至少 4 张
+                      拖拽或用左右键排序 · 第一张为封面 · 上架至少 4 张
                       {imageCount > 0 ? ` · 已有 ${imageCount} 张` : ""}
                       {needMore > 0 ? ` · 还差 ${needMore} 张` : ""}
                     </span>
                   </div>
+                  <p className="visually-hidden" aria-live="polite">
+                    {moveLive}
+                  </p>
                   <div className="thumb-grid">
                     {images.map((img, i) => {
                       const dragging = dragId === img.id;
@@ -439,12 +419,29 @@ export function VehicleFormView({
                               void onDropReorder(img.id);
                             }}
                             role="listitem"
-                            aria-grabbed={dragging}
                             aria-label={`图片 ${i + 1}${i === 0 ? "（封面）" : ""}，拖拽可排序`}
                           >
                             <ThumbPreview src={img.url} alt={img.caption || `图片 ${i + 1}`} />
                             {i === 0 ? <span className="tag thumb-cover">封面</span> : null}
                             {dragging ? <span className="thumb-drag-hint">拖动中</span> : null}
+                            <div className="thumb-actions">
+                              {i !== 0 ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => void onSetCover(img.id)}
+                                >
+                                  设为封面
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-danger-text"
+                                onClick={() => void onDeleteImage(img.id)}
+                              >
+                                删除
+                              </button>
+                            </div>
                           </div>
                           <input
                             className="input input-caption"
@@ -459,13 +456,32 @@ export function VehicleFormView({
                             onBlur={(e) => void onSaveCaption(img.id, e.target.value)}
                             aria-label={`图片 ${i + 1} 说明`}
                           />
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-thumb-del"
-                            onClick={() => void onDeleteImage(img.id)}
-                          >
-                            删除
-                          </button>
+                          <div className="thumb-keys">
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={i === 0}
+                              onClick={() => {
+                                void onMoveImage(img.id, -1);
+                                setMoveLive(`已移到第 ${i} 位`);
+                              }}
+                              aria-label={`将图片 ${i + 1} 左移`}
+                            >
+                              ←
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={i === images.length - 1}
+                              onClick={() => {
+                                void onMoveImage(img.id, 1);
+                                setMoveLive(`已移到第 ${i + 2} 位`);
+                              }}
+                              aria-label={`将图片 ${i + 1} 右移`}
+                            >
+                              →
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -522,7 +538,7 @@ export function VehicleFormView({
                     </div>
                   </div>
                   {imageCount > 0 && imageCount < 4 ? (
-                    <p className="banner banner-warn" role="status" style={{ marginTop: 12 }}>
+                    <p className="banner banner-warn banner-flush" role="status">
                       当前 {imageCount} 张，发布前至少需要 4 张图片。
                     </p>
                   ) : null}
@@ -590,7 +606,7 @@ export function VehicleFormView({
             {!editing ? (
               <div className="form-block">
                 <button type="submit" className="btn btn-primary" disabled={formBusy}>
-                  {formBusy ? "创建中…" : "创建"}
+                  {formBusy ? "创建中…" : "创建并继续"}
                 </button>
               </div>
             ) : null}

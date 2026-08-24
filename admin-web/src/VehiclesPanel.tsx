@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "./api";
+import { useConfirm } from "./ui/useConfirm";
 import { describeError } from "./vehicles/helpers";
 import { VehicleFormView } from "./vehicles/VehicleFormView";
 import { VehicleListView } from "./vehicles/VehicleListView";
 import {
   emptyForm,
+  vehicleToForm,
   type AdminVehicle,
   type ImageItem,
   type PriceRecordItem,
@@ -15,6 +17,7 @@ import {
 } from "./vehicles/types";
 
 export function VehiclesPanel() {
+  const { confirm, dialog } = useConfirm();
   const [view, setView] = useState<"list" | "form">("list");
   const [items, setItems] = useState<AdminVehicle[]>([]);
   const [total, setTotal] = useState(0);
@@ -38,6 +41,7 @@ export function VehiclesPanel() {
   const [listLoading, setListLoading] = useState(true);
   const [formBusy, setFormBusy] = useState(false);
   const [covers, setCovers] = useState<Record<number, string>>({});
+  const [listPrices, setListPrices] = useState<Record<number, PriceValue | null>>({});
 
   const publicOrigin = (import.meta.env.VITE_PUBLIC_WEB_ORIGIN as string | undefined)?.trim() || "";
   const pageSize = 20;
@@ -56,17 +60,28 @@ export function VehiclesPanel() {
       setItems(data.items);
       setTotal(data.total);
       setPage(nextPage);
-      void Promise.all(
+      setCovers({});
+      setListPrices({});
+      const extras = await Promise.all(
         data.items.map(async (v) => {
-          try {
-            const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${v.id}/images`);
-            const url = imgs.items[0]?.url;
-            if (url) setCovers((prev) => (prev[v.id] === url ? prev : { ...prev, [v.id]: url }));
-          } catch {
-            /* ignore cover errors */
-          }
+          const [imgRes, priceRes] = await Promise.allSettled([
+            api<{ items: ImageItem[] }>(`/admin/vehicles/${v.id}/images`),
+            api<{ filled: boolean; current: PriceValue | null }>(`/admin/vehicles/${v.id}/price`),
+          ]);
+          const cover =
+            imgRes.status === "fulfilled" ? imgRes.value.items[0]?.url : undefined;
+          const price = priceRes.status === "fulfilled" ? priceRes.value.current : null;
+          return { id: v.id, cover, price };
         }),
       );
+      const nextCovers: Record<number, string> = {};
+      const nextPrices: Record<number, PriceValue | null> = {};
+      for (const row of extras) {
+        if (row.cover) nextCovers[row.id] = row.cover;
+        nextPrices[row.id] = row.price;
+      }
+      setCovers(nextCovers);
+      setListPrices(nextPrices);
     } finally {
       setListLoading(false);
     }
@@ -119,6 +134,7 @@ export function VehiclesPanel() {
     try {
       const detail = await api<AdminVehicle>(`/admin/vehicles/${v.id}`);
       setSelected(detail);
+      setForm(vehicleToForm(detail));
       const [p, imgs, reps, records] = await Promise.all([
         api<{ filled: boolean; current: PriceValue | null }>(`/admin/vehicles/${v.id}/price`),
         api<{ items: ImageItem[] }>(`/admin/vehicles/${v.id}/images`),
@@ -153,20 +169,21 @@ export function VehiclesPanel() {
         method: "PATCH",
         body: JSON.stringify({
           version: selected.version,
-          brand: selected.brand,
-          model: selected.model,
-          registrationYear: selected.registrationYear,
-          mileageKm: selected.mileageKm,
-          color: selected.color,
-          conditionDesc: selected.conditionDesc,
-          energyType: selected.energyType,
-          transferCount: selected.transferCount,
-          displacementL: selected.energyType === "ev" ? null : selected.displacementL,
-          energyConsumption: selected.energyType === "gasoline" ? null : selected.energyConsumption,
-          batteryKwh: selected.energyType === "gasoline" ? null : selected.batteryKwh,
+          brand: form.brand,
+          model: form.model,
+          registrationYear: form.registrationYear,
+          mileageKm: form.mileageKm,
+          color: form.color,
+          conditionDesc: form.conditionDesc,
+          energyType: form.energyType,
+          transferCount: form.transferCount,
+          displacementL: form.energyType === "ev" ? null : form.displacementL ? Number(form.displacementL) : null,
+          energyConsumption: form.energyType === "gasoline" ? null : form.energyConsumption ? Number(form.energyConsumption) : null,
+          batteryKwh: form.energyType === "gasoline" ? null : form.batteryKwh ? Number(form.batteryKwh) : null,
         }),
       });
       setSelected(updated);
+      setForm(vehicleToForm(updated));
       await load();
       return updated;
     } catch (err) {
@@ -177,7 +194,15 @@ export function VehiclesPanel() {
 
   async function act(path: string, vehicle: AdminVehicle = selected as AdminVehicle) {
     if (!vehicle) return;
-    if (path === "trash" && !window.confirm("确认将该车辆移入回收站？可在回收站恢复。")) return;
+    if (path === "trash") {
+      const ok = await confirm({
+        title: "将该车辆移入回收站？",
+        body: "前台将立即不可见。可在回收站恢复为草稿，保留期内不会彻底删除。",
+        confirmLabel: "移入回收站",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     setError("");
     setInfo("");
     setFormBusy(true);
@@ -196,6 +221,7 @@ export function VehiclesPanel() {
         return;
       }
       setSelected(updated);
+      setForm(vehicleToForm(updated));
       await load();
     } catch (err) {
       setError(describeError(err, "操作失败"));
@@ -217,6 +243,7 @@ export function VehiclesPanel() {
       setPrice(data.current);
       const records = await api<{ items: PriceRecordItem[] }>(`/admin/vehicles/${selected.id}/price-records`);
       setPriceRecords(records.items);
+      setInfo("价格已保存");
     } catch (err) {
       setError(err instanceof Error ? err.message : "改价失败");
     }
@@ -253,6 +280,9 @@ export function VehiclesPanel() {
     const imgs = await api<{ items: ImageItem[] }>(`/admin/vehicles/${selected.id}/images`);
     setImages(imgs.items);
     if (imgs.items[0]?.url) setCovers((prev) => ({ ...prev, [selected.id]: imgs.items[0]!.url }));
+    window.setTimeout(() => {
+      setImageUploads((prev) => prev.filter((t) => t.status !== "done"));
+    }, 3000);
   }
 
   async function uploadReports(files: File[]) {
@@ -285,11 +315,20 @@ export function VehiclesPanel() {
     }
     const reps = await api<{ items: ReportItem[] }>(`/admin/vehicles/${selected.id}/reports`);
     setReports(reps.items);
+    window.setTimeout(() => {
+      setReportUploads((prev) => prev.filter((t) => t.status !== "done"));
+    }, 3000);
   }
 
   async function deleteImage(imageId: number) {
     if (!selected) return;
-    if (!window.confirm("确认删除这张图片？")) return;
+    const ok = await confirm({
+      title: "删除这张图片？",
+      body: "删除后不可恢复。若它是封面，下一张会自动成为封面。",
+      confirmLabel: "删除图片",
+      danger: true,
+    });
+    if (!ok) return;
     setError("");
     try {
       await api(`/admin/vehicles/${selected.id}/images/${imageId}`, { method: "DELETE" });
@@ -302,7 +341,13 @@ export function VehiclesPanel() {
 
   async function deleteReport(reportId: number) {
     if (!selected) return;
-    if (!window.confirm("确认删除这份评估报告？")) return;
+    const ok = await confirm({
+      title: "删除这份评估报告？",
+      body: "删除后不可从后台找回，需要重新上传。",
+      confirmLabel: "删除报告",
+      danger: true,
+    });
+    if (!ok) return;
     setError("");
     try {
       await api(`/admin/vehicles/${selected.id}/reports/${reportId}`, { method: "DELETE" });
@@ -320,6 +365,7 @@ export function VehiclesPanel() {
         method: "PATCH",
         body: JSON.stringify({ caption }),
       });
+      setInfo("图片说明已保存");
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存图片说明失败");
     }
@@ -341,15 +387,39 @@ export function VehiclesPanel() {
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     setDragId(null);
+    await applyImageOrder(next);
+  }
+
+  async function applyImageOrder(nextIds: number[]) {
+    if (!selected) return;
     try {
       const data = await api<{ items: ImageItem[] }>(`/admin/vehicles/${selected.id}/images/order`, {
         method: "PUT",
-        body: JSON.stringify({ imageIds: next }),
+        body: JSON.stringify({ imageIds: nextIds }),
       });
       setImages(data.items);
+      if (data.items[0]?.url) setCovers((prev) => ({ ...prev, [selected.id]: data.items[0]!.url }));
+      setInfo("图片顺序已更新");
     } catch (err) {
       setError(err instanceof Error ? err.message : "排序失败");
     }
+  }
+
+  async function setCover(imageId: number) {
+    const ids = images.map((img) => img.id);
+    const next = [imageId, ...ids.filter((id) => id !== imageId)];
+    await applyImageOrder(next);
+  }
+
+  async function moveImage(imageId: number, dir: -1 | 1) {
+    const ids = images.map((img) => img.id);
+    const from = ids.indexOf(imageId);
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    const next = [...ids];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    await applyImageOrder(next);
   }
 
   function startCreate() {
@@ -363,15 +433,16 @@ export function VehiclesPanel() {
     setView("form");
   }
 
-  if (view === "form") {
-    return (
+  const formOrList =
+    view === "form" ? (
       <VehicleFormView
         editing={selected}
         form={form}
         setForm={setForm}
-        setSelected={setSelected}
         error={error}
         info={info}
+        onDismissError={() => setError("")}
+        onDismissInfo={() => setInfo("")}
         formBusy={formBusy}
         publicOrigin={publicOrigin}
         price={price}
@@ -400,22 +471,25 @@ export function VehiclesPanel() {
         onDeleteReport={(id) => void deleteReport(id)}
         onSaveCaption={(id, caption) => void saveCaption(id, caption)}
         onDropReorder={(id) => void dropReorder(id)}
+        onSetCover={(id) => void setCover(id)}
+        onMoveImage={(id, dir) => void moveImage(id, dir)}
       />
-    );
-  }
-
-  return (
+    ) : (
     <VehicleListView
       items={items}
       total={total}
       page={page}
+      pageSize={pageSize}
       totalPages={totalPages}
       status={status}
       q={q}
       listLoading={listLoading}
       error={error}
       info={info}
+      onDismissError={() => setError("")}
+      onDismissInfo={() => setInfo("")}
       covers={covers}
+      listPrices={listPrices}
       onStatusChange={(value) => {
         setStatus(value);
         void load(1, { status: value }).catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
@@ -431,5 +505,12 @@ export function VehiclesPanel() {
       onCreate={startCreate}
       onPage={(p) => void load(p).catch((err) => setError(err instanceof Error ? err.message : "加载失败"))}
     />
+    );
+
+  return (
+    <>
+      {dialog}
+      {formOrList}
+    </>
   );
 }

@@ -50,6 +50,25 @@ export type VehicleFormState = {
   initialAmount: string;
 };
 
+export function vehicleToForm(v: AdminVehicle): VehicleFormState {
+  return {
+    brand: v.brand,
+    model: v.model,
+    registrationYear: v.registrationYear,
+    mileageKm: v.mileageKm,
+    color: v.color,
+    conditionDesc: v.conditionDesc,
+    energyType: v.energyType,
+    transferCount: v.transferCount,
+    displacementL: v.displacementL == null ? "" : String(v.displacementL),
+    energyConsumption: v.energyConsumption == null ? "" : String(v.energyConsumption),
+    batteryKwh: v.batteryKwh == null ? "" : String(v.batteryKwh),
+    vin: "",
+    initialPriceType: "amount",
+    initialAmount: "1.00",
+  };
+}
+
 export const emptyForm: VehicleFormState = {
   brand: "",
   model: "",

@@ -1,17 +1,21 @@
-import { brandMono, statusTag, ThumbPreview } from "./helpers";
-import { STATUS_LABEL, type AdminVehicle, type Status } from "./types";
+import { brandMono, formatPrice, statusTag, ThumbPreview } from "./helpers";
+import { STATUS_LABEL, type AdminVehicle, type PriceValue, type Status } from "./types";
 
 export type VehicleListViewProps = {
   items: AdminVehicle[];
   total: number;
   page: number;
+  pageSize: number;
   totalPages: number;
   status: Status | "";
   q: string;
   listLoading: boolean;
   error: string;
   info: string;
+  onDismissError: () => void;
+  onDismissInfo: () => void;
   covers: Record<number, string>;
+  listPrices: Record<number, PriceValue | null>;
   onStatusChange: (status: Status | "") => void;
   onQChange: (q: string) => void;
   onFilter: () => void;
@@ -75,12 +79,18 @@ export function VehicleListView(p: VehicleListViewProps) {
       </div>
       {p.error ? (
         <p className="banner banner-warn" role="alert">
-          {p.error}
+          <span>{p.error}</span>
+          <button type="button" className="banner-dismiss" onClick={p.onDismissError} aria-label="关闭提示">
+            ×
+          </button>
         </p>
       ) : null}
       {p.info ? (
         <p className="banner banner-ok" role="status">
-          {p.info}
+          <span>{p.info}</span>
+          <button type="button" className="banner-dismiss" onClick={p.onDismissInfo} aria-label="关闭提示">
+            ×
+          </button>
         </p>
       ) : null}
       {p.listLoading && p.items.length === 0 ? (
@@ -90,9 +100,9 @@ export function VehicleListView(p: VehicleListViewProps) {
               <div className="card elev-sm vehicle-card vehicle-card-skeleton">
                 <div className="skeleton-block vehicle-card-cover" />
                 <div className="vehicle-card-body">
-                  <div className="skeleton-line" style={{ width: "70%" }} />
-                  <div className="skeleton-line" style={{ width: "90%" }} />
-                  <div className="skeleton-line" style={{ width: "45%" }} />
+                  <div className="skeleton-line skel-w-70" />
+                  <div className="skeleton-line skel-w-90" />
+                  <div className="skeleton-line skel-w-45" />
                 </div>
               </div>
             </li>
@@ -142,6 +152,7 @@ export function VehicleListView(p: VehicleListViewProps) {
                       </span>
                       <span className={statusTag(v.status)}>{STATUS_LABEL[v.status]}</span>
                     </div>
+                    <div className="vehicle-card-price">{formatPrice(p.listPrices[v.id] ?? null)}</div>
                     <div className="page-sub">
                       #{v.id} · {v.registrationYear || "—"} 年 · {(v.mileageKm ?? 0).toLocaleString("zh-CN")} 公里
                       {v.vinMasked ? ` · ${v.vinMasked}` : ""}
@@ -153,13 +164,13 @@ export function VehicleListView(p: VehicleListViewProps) {
           })}
         </ul>
       ) : null}
-      {p.totalPages > 1 ? (
+      {p.total > 0 ? (
         <div className="pager">
           <button type="button" className="btn btn-ghost" disabled={p.page <= 1} onClick={() => p.onPage(p.page - 1)}>
             上一页
           </button>
           <span>
-            {p.page} / {p.totalPages}
+            {`第 ${(p.page - 1) * p.pageSize + 1}–${Math.min(p.page * p.pageSize, p.total)} 辆，共 ${p.total} 辆`}
           </span>
           <button
             type="button"
