@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
 import { api } from "../api";
 import { useSession } from "../session";
+import { useConfirm } from "../ui/useConfirm";
 
 type Account = {
   id: number;
@@ -12,14 +12,12 @@ type Account = {
 };
 
 export function AccountsPage() {
-  const { session, setSession } = useSession();
-  const navigate = useNavigate();
+  const { confirm, dialog } = useConfirm();
+  const { session } = useSession();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [oncePassword, setOncePassword] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [newLogin, setNewLogin] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "super_admin">("admin");
   const [busy, setBusy] = useState(false);
@@ -34,24 +32,6 @@ export function AccountsPage() {
       setError(err instanceof Error ? err.message : "无法加载账号");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function changeOwnPassword(e: FormEvent) {
-    e.preventDefault();
-    setError("");
-    setBusy(true);
-    try {
-      await api("/admin/auth/password", {
-        method: "POST",
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      setSession(null);
-      navigate("/login", { replace: true, state: { notice: "密码已修改，请重新登录" } });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "改密失败");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -77,6 +57,15 @@ export function AccountsPage() {
   }
 
   async function setEnabled(id: number, enabled: boolean) {
+    if (!enabled) {
+      const ok = await confirm({
+        title: "停用该账号？",
+        body: "对方将立即无法登录。已发出的会话会失效，可随时再启用。",
+        confirmLabel: "停用账号",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     setError("");
     try {
       await api(`/admin/accounts/${id}/status`, {
@@ -90,7 +79,13 @@ export function AccountsPage() {
   }
 
   async function resetPassword(id: number) {
-    if (!window.confirm("确认重置该账号密码？旧口令将立即失效。")) return;
+    const ok = await confirm({
+      title: "重置该账号密码？",
+      body: "旧口令将立即失效，对方需使用新的一次性口令登录并改密。",
+      confirmLabel: "重置密码",
+      danger: true,
+    });
+    if (!ok) return;
     setError("");
     setOncePassword("");
     try {
@@ -112,6 +107,8 @@ export function AccountsPage() {
   if (!session) return null;
 
   return (
+    <>
+      {dialog}
     <div>
       <div className="page-head">
         <div>
@@ -131,49 +128,12 @@ export function AccountsPage() {
         </p>
       ) : null}
 
-      <div className="card elev-sm admin-section-card">
-        <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
-          修改自己的密码
-        </span>
-        <form onSubmit={(e) => void changeOwnPassword(e)} style={{ maxWidth: 360, display: "flex", flexDirection: "column", gap: 12 }}>
-          <label className="field">
-            <span>当前密码</span>
-            <input
-              className="input"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </label>
-          <label className="field">
-            <span>新密码</span>
-            <input
-              className="input"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-              minLength={8}
-              maxLength={72}
-            />
-          </label>
-          <button type="submit" className="btn btn-secondary" disabled={busy} style={{ alignSelf: "flex-start" }}>
-            {busy ? "提交中…" : "改密"}
-          </button>
-        </form>
-      </div>
-
       {session.role === "super_admin" ? (
         <>
           <div className="card elev-sm admin-section-card">
-            <span className="page-sub" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>
-              新建管理员
-            </span>
+            <span className="page-sub section-kicker">新建管理员</span>
             <form onSubmit={(e) => void createAccount(e)} className="toolbar toolbar-end">
-              <label className="field" style={{ flex: 1, minWidth: 160 }}>
+              <label className="field field-grow">
                 <span>新登录名</span>
                 <input
                   className="input"
@@ -207,9 +167,11 @@ export function AccountsPage() {
               </button>
             </form>
             {oncePassword ? (
-              <div className="banner banner-warn" role="status">
-                <div>一次性口令（只显示一次，请立即抄送给对方）</div>
-                <code className="code-break">{oncePassword}</code>
+              <div className="banner banner-info" role="status">
+                <div>
+                  <div>一次性口令（只显示一次，请立即抄送给对方）</div>
+                  <code className="code-break">{oncePassword}</code>
+                </div>
               </div>
             ) : null}
           </div>
@@ -241,11 +203,11 @@ export function AccountsPage() {
                 </thead>
                 <tbody>
                   {accounts.map((a) => (
-                    <tr key={a.id} style={a.enabled ? undefined : { opacity: 0.55 }}>
+                    <tr key={a.id} className={a.enabled ? undefined : "muted-row"}>
                       <td>
                         {a.loginName}
                         {a.id === session.accountId ? <span className="page-sub"> · 我</span> : null}
-                        {a.mustChangePassword ? <span className="tag tag-outline" style={{ marginLeft: 8 }}>待改密</span> : null}
+                        {a.mustChangePassword ? <span className="tag tag-outline tag-inline">待改密</span> : null}
                       </td>
                       <td>{a.role === "super_admin" ? "超级管理员" : "管理员"}</td>
                       <td>
@@ -253,7 +215,7 @@ export function AccountsPage() {
                           {a.enabled ? "启用" : "停用"}
                         </span>
                       </td>
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <td className="table-actions">
                         {a.id !== session.accountId ? (
                           <button type="button" className="btn btn-ghost" onClick={() => void setEnabled(a.id, !a.enabled)}>
                             {a.enabled ? "停用" : "启用"}
@@ -272,5 +234,6 @@ export function AccountsPage() {
         </>
       ) : null}
     </div>
+    </>
   );
 }

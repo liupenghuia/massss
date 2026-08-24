@@ -45,7 +45,7 @@ export function ChangePasswordPage() {
   return (
     <div className="login-wrap">
       <form className="password-card" onSubmit={(e) => void onSubmit(e)} aria-busy={loading}>
-        <p className="page-sub" style={{ margin: 0 }}>
+        <p className="page-sub tight-lead">
           {session.loginName} · 首次登录
         </p>
         <h1>首次登录请改密</h1>

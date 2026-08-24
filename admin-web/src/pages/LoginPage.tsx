@@ -43,7 +43,7 @@ export function LoginPage() {
           <div className="login-blob" />
         </div>
         <div className="login-body">
-          <p className="page-sub" style={{ margin: 0 }}>
+          <p className="page-sub tight-lead">
             车行 · 管理后台
           </p>
           <h1>管理后台登录</h1>

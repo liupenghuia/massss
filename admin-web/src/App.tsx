@@ -4,6 +4,7 @@ import { AdminLayout } from "./layouts/AdminLayout";
 import { AccountsPage } from "./pages/AccountsPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { RecyclePanel } from "./RecyclePanel";
 import { SessionProvider, useSession } from "./session";
 
@@ -65,6 +66,7 @@ export default function App() {
               }
             />
             <Route path="/recycle" element={<RecyclePanel />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route
               path="/accounts"
               element={

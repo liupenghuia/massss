@@ -53,6 +53,14 @@ export function AdminLayout() {
           <span>
             {session.loginName}（{roleLabel}）
           </span>
+          <button
+            type="button"
+            className={location.pathname === "/profile" ? "btn btn-ghost is-current" : "btn btn-ghost"}
+            aria-current={location.pathname === "/profile" ? "page" : undefined}
+            onClick={() => navigate("/profile")}
+          >
+            我的资料
+          </button>
           <button type="button" className="btn btn-ghost" onClick={() => void logout()}>
             退出
           </button>
