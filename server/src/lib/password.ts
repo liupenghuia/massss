@@ -12,11 +12,13 @@ export async function verifyPassword(plain: string, passwordHash: string): Promi
 }
 
 /**
- * 密码策略：≥8 且含字母与数字（既有规则）；
- * ADR-105：上限 72 字符；禁止控制字符；其余可打印 UTF-8 不限。
+ * 密码策略：≥8 字符且含字母与数字（既有规则）；
+ * ADR-105/ADR-111：上限 72 UTF-8 字节（非字符数，避免 bcrypt 静默截断）；
+ * 禁止控制字符；其余可打印 UTF-8 不限。
  */
 export function passwordMeetsPolicy(plain: string): boolean {
-  if (plain.length < 8 || plain.length > 72) return false;
+  const byteLength = Buffer.byteLength(plain, "utf8");
+  if (plain.length < 8 || byteLength > 72) return false;
   // 拒绝 C0 控制符与 DEL
   if (/[\u0000-\u001F\u007F]/.test(plain)) return false;
   return /[A-Za-z]/.test(plain) && /[0-9]/.test(plain);
