@@ -4,9 +4,9 @@
 
 | ID | 名称 | 状态 | 版本 | 涉及端 | 未决 |
 |---|---|---|---|---|---|
-| F-001 | 车辆信息管理 | implementing | 1.4 |  | 0 |
-| F-002 | 前台车辆展示 | implementing | 1.4 |  | 0 |
-| F-003 | 图片与评估报告 | implementing | 1.1 |  | 0 |
-| F-004 | 价格记录 | implementing | 1.1 |  | 0 |
-| F-005 | 回收站 | implementing | 1.2 |  | 0 |
-| F-006 | 后台账号管理 | implementing | 1.2 |  | 0 |
+| F-001 | 车辆信息管理 | implementing | 1.8 |  | 0 |
+| F-002 | 前台车辆展示 | implementing | 1.7 |  | 0 |
+| F-003 | 图片与评估报告 | implementing | 1.4 |  | 0 |
+| F-004 | 价格记录 | implementing | 1.3 |  | 0 |
+| F-005 | 回收站 | implementing | 1.4 |  | 0 |
+| F-006 | 后台账号管理 | implementing | 1.6 |  | 0 |

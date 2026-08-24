@@ -5,8 +5,8 @@
 ## 仓库结构
 
 ```
-admin-web/    管理后台（React 19 + TS + Vite + Ant Design）
-public-web/   访客前台 / 卖车展示站（React 19 + TS + Vite + Tailwind v4）
+admin-web/    管理后台（React 19 + TS + Vite；Organic 卡片网格 + 顶栏，自有 Field）
+public-web/   访客前台 / 卖车展示站（React 19 + TS + Vite + shared CSS）
 server/       Node.js + Express + PostgreSQL   ← 本阶段禁止改动
 ```
 
@@ -40,7 +40,8 @@ npm run test:e2e     # Playwright（含截图回归，尚未铺开）
 ## 工作方式
 
 - 涉及多个文件或超过约 100 行改动的任务，先用 `/plan` 给出计划，等我确认后再执行。
-- 每个页面 / 每个批次单独提交，commit message 用中文，格式：`ui(admin): 迁移车辆列表页到 ProTable`。
+- 每个页面 / 每个批次单独提交，commit message 用中文，格式：`ui(admin): 车辆列表卡片展示当前价`。
+- 文档（spec / ADR / AGENTS）与代码边界必须一致：契约未改就不要写成已改；未做能力不要写成已做。
 - 遇到需求本身有歧义、或按要求做会破坏现有功能时，停下来说明，不要自作主张选一条路走下去。
 
 ## 代码规范

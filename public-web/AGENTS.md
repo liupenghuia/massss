@@ -16,12 +16,14 @@
 
 ## 设计 token
 
-全部 token 定义在 `src/index.css` 的 `@theme` 块里：中性灰阶 + 单一强调色、8px 间距节奏、有限字号阶梯、统一圆角与单层阴影。
+token 与组件类以 `shared/organic.css` + `shared/shell.css` 为准（与后台同一套）。
+`src/index.css` 只做引入与少量前台布局，**不要**再铺第二套色板或 `@theme` 硬编码。
 
-- **颜色只能取 token**（如 `bg-accent-600`、`text-ink-700`），禁止硬编码 hex，禁止 `bg-[#xxxxxx]`
-- **间距只能取 4 的倍数**，禁止 `p-[7px]` 这类任意值
-- 强调色只出现在三个地方：价格、主 CTA、促销标签。其余界面由中性灰阶承载
-- 全站一套无衬线字体栈，禁止引入第二套字体
+- 颜色、间距、圆角、字号只取 organic/shell 变量与已有类
+- 强调色只出现在价格、主 CTA、促销标签
+- 全站一套无衬线字体栈
+- 新页面复用 `.btn` `.card` `.tag` `.input` `.pager`；新增全局类走 ADR
+- 内联 style 仅动态计算值；最小正文 12px
 
 ## 必须复用的基础组件
 

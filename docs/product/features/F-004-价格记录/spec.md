@@ -2,10 +2,10 @@
 id: F-004
 title: 价格记录
 status: implementing
-version: 1.2
+version: 1.3
 owners: []
 contracts: [adminPutVehiclePrice, adminGetVehiclePrice, adminListVehiclePriceRecords, publicGetVehiclePrice, publicListVehiclePriceRecords, isPriceFilled, PriceValue]
-adrs: [ADR-015, ADR-016, ADR-017, ADR-073, ADR-074, ADR-075, ADR-076]
+adrs: [ADR-015, ADR-016, ADR-017, ADR-073, ADR-074, ADR-075, ADR-076, ADR-113]
 rfcs: []
 ---
 
@@ -76,6 +76,7 @@ ADR-012、ADR-013、ADR-014 已被 ADR-015、ADR-016、ADR-017 取代，实现�
 `/admin/*` 改价与单车记录列表；`/public/*` 只读且仅已上架车辆。
 
 **管理后台**：车辆详情内设价/改价、查看该车记录；创建车辆可带初始价格。
+车辆列表卡片可展示当前价，仍调用既有单车价格查询，**不**在 `adminListVehicles` 增加价格字段（ADR-113）。
 
 **前台**：渲染 F-004 返回的类型与金额；条数、分页、文案归 F-002。
 
@@ -83,6 +84,7 @@ ADR-012、ADR-013、ADR-014 已被 ADR-015、ADR-016、ADR-017 取代，实现�
 
 - 不做价格审批、批量改价、促销/折扣（brief）
 - 不做导出、不做改价二次确认、不做备注字段、不做按价格状态筛车（ADR-016）
+- 列表契约不加当前价字段；后台列表展示价为前端并行拉取兜底（ADR-113）
 - 不做快照表（ADR-015）
 - 前台展示策略不在本 feature 定稿（ADR-017）
 - 删除后记录的展示/清理留给 F-005（ADR-016）
@@ -94,3 +96,4 @@ ADR-012、ADR-013、ADR-014 已被 ADR-015、ADR-016、ADR-017 取代，实现�
   自增序号（非时间戳）并对改价加事务+行锁防并发错乱、金额以最小货币单位整数存储、
   创建车辆带初始价格的车辆行与价格记录同一事务提交、操作人展示账号名、
   反查失败错误码沿用现有 INTERNAL_ERROR 契约（ADR-073、ADR-074、ADR-075、ADR-076）
+- v1.3 后台车辆列表可展示当前价，数据仍来自价格接口，不新增列表字段（ADR-113）

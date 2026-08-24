@@ -2,10 +2,10 @@
 id: F-001
 title: 车辆信息管理
 status: implementing
-version: 1.6
+version: 1.8
 owners: []
 contracts: [adminCreateVehicle, adminListVehicles, adminGetVehicle, adminPatchVehicle, adminPublishVehicle, adminUnpublishVehicle, publicListVehicles, publicGetVehicle, VEHICLE_VERSION_CONFLICT, PUBLISH_PRECONDITION_FAILED, ILLEGAL_STATUS_TRANSITION, Idempotency-Key]
-adrs: [ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-007, ADR-010, ADR-023, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-110]
+adrs: [ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-007, ADR-010, ADR-023, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-110, ADR-112, ADR-113]
 rfcs: []
 ---
 
@@ -68,14 +68,24 @@ rfcs: []
 乐观锁冲突（VEHICLE_VERSION_CONFLICT）仅返回错误，不在 details 中回传服务端当前最新数据（ADR-038）。
 
 **管理后台**：列表页支持按状态筛选、按关键字搜索，默认展示全部状态（含草稿），不做默认过滤（ADR-038）；
-不做导出功能；不含价格字段（价格归 F-004）。见 ADR-006、ADR-007、ADR-038。
+不做导出功能。列表契约仍不返回价格（价格归 F-004）；卡片可展示当前价，数据来自列表之后对每车并行
+`GET` 价格接口（及封面所需的 images），一次 setState 收齐（ADR-113），**不是**列表响应字段。
+录入交互（ADR-112 / ADR-113，不改契约）：
+- 新建为两段式：界面标明「步骤 1/2」，创建成功后再上传图片与报告（图片仍要求车辆已存在）。
+- 新建与编辑共用**单一 draft 状态**（实现重构，能力不变）；草稿可空、发布校验仍按 ADR-035 / ADR-003。
+- 品牌/车型标「建议填写」，草稿保存仍允许空（ADR-035）。
+- 上牌年/里程/过户次数就地校验：控件上牌年 1980–当年、里程 ≥0、过户 0–20；
+  错误出现在该字段下方。服务端范围仍以 ADR-038 为准。
+- VIN 创建后只读，并说明「创建后不可修改」。
+- 移入回收站须站内二次确认。
 
 ## 边界与限制
 
 - 本期不为 F-005（回收站）预留软删除字段，F-005 上线时需对 vehicles 表做迁移（ADR-005）
 - 草稿数据在 F-005 上线前无法清除/作废，是已知限制（ADR-006）
 - 不做车辆清单导出（ADR-006）
-- 车辆卡片不含价格字段，价格完全归 F-004（ADR-007）
+- 价格数据仍完全归 F-004：列表接口不加 `price`/`coverUrl`；卡片展示价走独立价格接口兜底（ADR-007 数据归属 + ADR-113 展示口径）
+- 不做批量下架；下架仅单车（ADR-113）
 - 车辆规模"100 台以内"是当前值非长期上限，技术方案需按可增长设计（ADR-007）
 - 管理后台权限：只有一种管理员角色，无只读/审核账号，不设审批流程（已在 docs/product/overview.md
   角色部分确认，对应 /conflicts 问题 9）
@@ -96,3 +106,5 @@ rfcs: []
   （ADR-034、ADR-035、ADR-036、ADR-037、ADR-038）
 - v1.6 实现阶段核实发现 ADR-038 第1条与已实现代码冲突，改为维持现状（服务端保留能源类型
   联动强校验），作废该条，其余不变（ADR-110）
+- v1.7 管理后台录入就地校验、新建两段式步骤说明、VIN 只读提示（ADR-112）；服务端字段规则不变
+- v1.8 列表卡片可展示当前价（独立价格接口，非列表字段）；新建/编辑单一 draft 不改变草稿可空/发布校验；明确不做批量下架（ADR-113）

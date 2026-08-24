@@ -6,46 +6,55 @@
 
 - React 19 + TypeScript + Vite
 - 视觉以仓库 `车辆管理系统架构/车辆系统统一设计-standalone.dc.html` 为准（Organic：奶油底、陶土强调色、圆角胶囊）
-- 样式只从 `shared/organic.css` + `shared/shell.css` 取 token 和组件类（`.btn` `.card` `.tag` `.input` `.seg` `.table`），**不要再铺 antd 皮肤**
-- 前台与后台同一套 token；后台桌面优先、顶栏导航，不用侧栏
+- 样式只从 `shared/organic.css` + `shared/shell.css` 取 token 和组件类（`.btn` `.card` `.tag` `.input` `.seg` `.table` `.dialog`），**不要再铺 antd 皮肤**
+- 前台与后台同一套 token；后台桌面优先、**顶栏导航**，不用侧栏
+- 表单用自有 Field，**不要**用 ProTable / DrawerForm / ModalForm 当列表或录入骨架
 
 ## 页面骨架
 
 - 顶栏：`车行 · 管理后台` + 车辆 / 回收站 / 账号胶囊 + 用户名/退出
-- 车辆列表用 **卡片网格**（不是表格）；筛选用状态分段 + 关键字
+- 车辆列表用 **卡片网格**（不是表格）；筛选用状态分段 + 关键字；**不做批量下架、不做列表批量操作条**
 - 录入/编辑为左右两栏：表单+图片 | 操作/前台链接/价格记录
+- 新建与编辑共用单一 draft 状态；草稿可空、发布校验时机不变
 
-## 列表页（历史约定，仅当设计稿使用表格时）
+## 列表页
 
-- `request` 直接对接现有接口，返回 `{ data, success, total }`
-- 筛选走 `search` 配置，**不要自己在表格上方手搓一排 Input + Button**
-- 状态类字段用 `valueEnum`，日期用 `valueType: 'date'`，金额用 `valueType: 'money'`
-- 批量操作用 `rowSelection` + `tableAlertRender`
-- 必须配 `rowKey`
-- 错误用 `onRequestError` 统一走全局 message
+- 直接对接现有列表接口；契约无 `price` / `coverUrl` 时，卡片当前价与封面用既有单车接口并行拉取后一次 setState（ADR-113），禁止改契约或造 mock
+- 筛选：状态分段 + 关键字，不要另起一套表格 search 配置
+- 分页、空态、错误态、加载态必须有；单车价格请求失败不得让整页列表失败
+- `rowKey` / `rowSelection` / `tableAlertRender` 等 ProTable 约定**不适用**本后台列表
 
 ## 表单
 
-- 新增 / 编辑用 `DrawerForm`（车辆字段多，抽屉优于弹窗），简单确认类用 `ModalForm`
-- 校验规则写在 `ProForm` 字段的 `rules` 上，**不要提交后才用 message 报错**
-- 表单关闭时必须销毁内部状态（`drawerProps: { destroyOnClose: true }`），防止上次的旧值残留
+- 校验写在字段旁（就地错误），不要只在提交后用顶部 message
+- 关闭或离开编辑时丢掉未保存的本地 draft，防止上次旧值残留
+- 破坏性操作用 `.dialog`，禁止 `window.confirm`
+
+## 样式
+
+- 新页面必须复用 `.btn` `.card` `.tag` `.input` `.seg` `.table` `.dialog`
+- 新增全局类走 ADR
+- 内联 style 仅动态计算值；字面量收回 `shell.css`
+- 最小正文 12px
 
 ## 打包体积
 
-- 图标只按需引入具名导出：`import { SearchOutlined } from '@ant-design/icons'`，**禁止 `import * as Icons`**
+- 图标只按需引入具名导出，禁止 `import * as Icons`
 - 路由级用 `React.lazy` 做代码分割
-- 体积异常时用 `vite-bundle-visualizer` 排查，必要时对个别组件改用深路径引入 `antd/es/xxx`
 
 ## 禁止事项
 
 - 禁止引入第二个 UI 组件库
-- 禁止手写 CSS 去覆盖 antd 组件的内部结构（v6 的 DOM 结构与 v5 不同，这类覆盖会碎）
-- 禁止在 antd 项目里引入 Tailwind
+- 禁止在本项目引入 Tailwind 覆盖 Organic
 - 禁止用 `dangerouslySetInnerHTML`
 - 禁止把接口返回的原始字段名直接当表头文案
+- 禁止修改调用接口的 URL、方法、参数名、响应解构
+- 禁止声称列表契约已含价格
 
 ## 完成定义（本目录追加）
 
-- 列表页具备：筛选、排序、分页、批量操作、空态、错误态
-- 表单具备：必填标识、内联校验、提交 loading、成功后刷新列表
-- 按钮层级分明：一屏内只有一个 `type="primary"`
+- 改完必须在本目录跑 `lint`、`typecheck`、`build`，全绿才算完成
+- 涉及 UI：加载态、空态、错误态三态齐全
+- 列表页：筛选、分页、空态、错误态（**不要求**批量操作）
+- 表单：必填/建议标识、内联校验、提交 loading、成功后刷新列表
+- 文档与代码边界一致

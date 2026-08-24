@@ -2,10 +2,10 @@
 id: F-003
 title: 图片与评估报告
 status: implementing
-version: 1.3
+version: 1.4
 owners: []
 contracts: [adminPresignVehicleImage, adminConfirmVehicleImage, adminPatchVehicleImageCaption, adminReorderVehicleImages, adminDeleteVehicleImage, adminListVehicleImages, adminPresignVehicleReport, adminConfirmVehicleReport, adminDeleteVehicleReport, adminListVehicleReports, publicListVehicleImages, publicListVehicleReports, PUBLISHED_IMAGE_MIN, countImages, INVALID_OBJECT_KEY, IMAGE_ORDER_MISMATCH]
-adrs: [ADR-008, ADR-009, ADR-010, ADR-011, ADR-056, ADR-057, ADR-058, ADR-059]
+adrs: [ADR-008, ADR-009, ADR-010, ADR-011, ADR-056, ADR-057, ADR-058, ADR-059, ADR-112]
 rfcs: []
 ---
 
@@ -41,6 +41,9 @@ rfcs: []
 - `adminReorderVehicleImages` 传入的图片 ID 列表与该车实际图片集合不一致（缺失/多余/重复）时，
   服务端拒绝整个请求，返回 IMAGE_ORDER_MISMATCH（沿用 contracts/errors.yaml 既有定义，非新决策）
 - 拖拽排序完成后自动保存，不需要显式点击"保存排序"按钮（ADR-057）
+- 第一张图为封面。「设为封面」与键盘左右移等价于调整顺序，均走既有
+  `adminReorderVehicleImages`，不新增接口（ADR-112）
+- 删除按钮不在缩略图下常驻满宽，改为悬停/焦点浮层，降低误点（ADR-112）
 - 不做并发排序冲突检测、不做打包下载
 - 单车图片数超 100 张仅写入操作日志告警，不做后台可见提示或运维通知（ADR-057）
 - 客户端直传成功但从未调用 confirm 产生的孤儿对象，本期不做任何清理，推迟到后续评估，
@@ -87,3 +90,4 @@ rfcs: []
   排序自动保存）；已删除车辆图片/报告可见性口径因触及零容忍项未裁决，待用户明示
   （ADR-056、ADR-057、ADR-058）
 - v1.3 用户明示裁决：回收站车辆的图片/报告在 `/public/*` 与"已下架"同口径过滤（ADR-059）
+- v1.4 「设为封面」与键盘排序；删除改为悬停浮层；确认改用站内对话框（ADR-112）
