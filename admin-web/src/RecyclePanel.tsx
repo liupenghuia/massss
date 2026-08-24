@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { useConfirm } from "./ui/useConfirm";
 
 type RecycleItem = {
   id: number;
@@ -30,8 +31,13 @@ function remainingDaysFloor(purgeDueAt: string): number {
   return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
 }
 
+const PAGE_SIZE = 20;
+
 export function RecyclePanel() {
+  const { confirm, dialog } = useConfirm();
   const [items, setItems] = useState<RecycleItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -41,14 +47,16 @@ export function RecyclePanel() {
   const [detailReports, setDetailReports] = useState<ReportItem[]>([]);
   const [detailPrices, setDetailPrices] = useState<PriceRecordItem[]>([]);
 
-  async function load() {
+  async function load(nextPage = page) {
     setError("");
     setLoading(true);
     try {
-      const qs = new URLSearchParams({ page: "1", pageSize: "50" });
+      const qs = new URLSearchParams({ page: String(nextPage), pageSize: String(PAGE_SIZE) });
       if (keyword.trim()) qs.set("keyword", keyword.trim());
-      const data = await api<{ items: RecycleItem[] }>(`/admin/recycle-bin?${qs}`);
+      const data = await api<{ items: RecycleItem[]; total: number }>(`/admin/recycle-bin?${qs}`);
       setItems(data.items);
+      setTotal(data.total);
+      setPage(nextPage);
     } finally {
       setLoading(false);
     }
@@ -82,6 +90,12 @@ export function RecyclePanel() {
   }
 
   async function restore(item: RecycleItem) {
+    const ok = await confirm({
+      title: "恢复为草稿？",
+      body: "车辆会回到草稿，前台仍不可见，可再编辑后发布。",
+      confirmLabel: "恢复为草稿",
+    });
+    if (!ok) return;
     setError("");
     try {
       await api(`/admin/vehicles/${item.id}/restore`, {
@@ -95,12 +109,16 @@ export function RecyclePanel() {
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   return (
+    <>
+      {dialog}
     <div>
       <div className="page-head">
         <div>
           <h2>回收站</h2>
-          <p className="page-sub">删除后保留 1 个月，到期自动清除{loading ? " · 加载中…" : ` · ${items.length} 辆`}</p>
+          <p className="page-sub">删除后保留 1 个月，到期自动清除{loading ? " · 加载中…" : ` · 共 ${total} 辆`}</p>
         </div>
         <div className="toolbar">
           <input
@@ -111,7 +129,7 @@ export function RecyclePanel() {
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                void load().catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
+                void load(1).catch((err) => setError(err instanceof Error ? err.message : "加载失败"));
               }
             }}
             aria-label="回收站关键字"
@@ -119,7 +137,7 @@ export function RecyclePanel() {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => void load().catch((err) => setError(err instanceof Error ? err.message : "加载失败"))}
+            onClick={() => void load(1).catch((err) => setError(err instanceof Error ? err.message : "加载失败"))}
           >
             筛选
           </button>
@@ -146,7 +164,7 @@ export function RecyclePanel() {
               {[0, 1, 2, 3].map((i) => (
                 <tr key={i}>
                   <td colSpan={4}>
-                    <div className="skeleton-line" style={{ width: `${70 - i * 8}%`, margin: "8px 0" }} />
+                    <div className={`skeleton-line skel-row ${["skel-w-70", "skel-w-60", "skel-w-55", "skel-w-45"][i]}`} />
                   </td>
                 </tr>
               ))}
@@ -195,7 +213,7 @@ export function RecyclePanel() {
                 const left = remainingDaysFloor(item.purgeDueAt);
                 const soon = left <= 7;
                 return (
-                  <tr key={item.id}>
+                  <tr key={item.id} className={detailId === item.id ? "table-row-active" : undefined}>
                     <td>
                       #{item.id} {item.brand} {item.model}
                     </td>
@@ -204,11 +222,11 @@ export function RecyclePanel() {
                         {ORIGINAL[item.originalStatus] ?? item.originalStatus}
                       </span>
                     </td>
-                    <td style={soon ? { color: "var(--color-accent-700)" } : undefined}>
+                    <td className={soon ? "cell-warn" : undefined}>
                       {item.purgeDueAt.slice(0, 10)}
                       {` · 剩余 ${left} 天`}
                     </td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <td className="table-actions">
                       <button type="button" className="btn btn-ghost" onClick={() => void viewDetail(item)}>
                         查看详情
                       </button>
@@ -224,10 +242,27 @@ export function RecyclePanel() {
         </div>
       ) : null}
 
+      {total > 0 ? (
+        <div className="pager">
+          <button type="button" className="btn btn-ghost" disabled={page <= 1} onClick={() => void load(page - 1)}>
+            上一页
+          </button>
+          <span>{`第 ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} 辆，共 ${total} 辆`}</span>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={page >= totalPages}
+            onClick={() => void load(page + 1)}
+          >
+            下一页
+          </button>
+        </div>
+      ) : null}
+
       {detailId !== null ? (
-        <div className="card elev-sm admin-section-card" style={{ marginTop: 20 }}>
+        <div className="card elev-sm admin-section-card recycle-detail">
           <div className="card-title-row">
-            <span style={{ fontFamily: "var(--font-heading)", fontSize: 17 }}>车辆 #{detailId} 详情（只读）</span>
+            <span className="form-head-title">车辆 #{detailId} 详情（只读）</span>
             <button
               type="button"
               className="btn btn-ghost"
@@ -247,7 +282,7 @@ export function RecyclePanel() {
             </p>
           ) : (
             <>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div className="recycle-thumbs">
                 {detailImages.length === 0 ? <span className="page-sub">无图片</span> : null}
                 {detailImages.map((img) => (
                   <img
@@ -256,7 +291,7 @@ export function RecyclePanel() {
                     alt={img.caption || `车辆 ${detailId} 图片`}
                     width={76}
                     height={57}
-                    style={{ width: 76, aspectRatio: "4/3", objectFit: "cover", borderRadius: "var(--radius-sm)" }}
+                    className="recycle-thumb"
                   />
                 ))}
               </div>
@@ -268,5 +303,6 @@ export function RecyclePanel() {
         </div>
       ) : null}
     </div>
+    </>
   );
 }
