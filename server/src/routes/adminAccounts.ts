@@ -158,6 +158,7 @@ adminAccountsRouter.post("/admin/accounts/:accountId/status", async (req: Reques
 });
 
 adminAccountsRouter.post("/admin/accounts/:accountId/role", async (req: Request, res: Response, next: NextFunction) => {
+  const client = await pool.connect();
   try {
     const accountId = parseAccountId(req.params.accountId);
     const role = req.body?.role as AccountRole;
@@ -176,78 +177,88 @@ adminAccountsRouter.post("/admin/accounts/:accountId/role", async (req: Request,
       const n = await countActiveSuperAdmins();
       if (n <= 1) throw lastSuperAdmin();
     }
-    const updated = await setAccountRole(accountId, role);
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await insertOperationLog(client, {
-        operatorId: req.authAccount!.id,
-        action: "account.role",
-        vehicleId: null,
-        detail: { accountId, role },
-      });
-      await client.query("COMMIT");
-    } finally {
-      client.release();
-    }
+
+    await client.query("BEGIN");
+    const updated = await setAccountRole(accountId, role, client);
+    await insertOperationLog(client, {
+      operatorId: req.authAccount!.id,
+      action: "account.role",
+      vehicleId: null,
+      detail: { accountId, role },
+    });
+    await client.query("COMMIT");
     res.status(200).json(toAdminAccount(updated));
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
     next(err);
+  } finally {
+    client.release();
   }
 });
 
 adminAccountsRouter.post("/admin/accounts/:accountId/password-reset", async (req: Request, res: Response, next: NextFunction) => {
+  const client = await pool.connect();
   try {
     const accountId = parseAccountId(req.params.accountId);
     const target = await findAccountById(accountId);
     if (!target) throw accountNotFound();
     const initialPassword = generateInitialPassword();
-    await updatePassword(accountId, await hashPassword(initialPassword), true);
-    await revokeAllSessionsForAccount(accountId);
+    const passwordHash = await hashPassword(initialPassword);
+
+    await client.query("BEGIN");
+    await updatePassword(accountId, passwordHash, true, client);
+    await revokeAllSessionsForAccount(accountId, client);
+    await insertOperationLog(client, {
+      operatorId: req.authAccount!.id,
+      action: "account.password_reset",
+      vehicleId: null,
+      detail: { accountId },
+    });
+    await client.query("COMMIT");
     const updated = await findAccountById(accountId);
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await insertOperationLog(client, {
-        operatorId: req.authAccount!.id,
-        action: "account.password_reset",
-        vehicleId: null,
-        detail: { accountId },
-      });
-      await client.query("COMMIT");
-    } finally {
-      client.release();
-    }
     res.status(200).json({ account: toAdminAccount(updated!), initialPassword });
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
     next(err);
+  } finally {
+    client.release();
   }
 });
 
 adminAccountsRouter.delete("/admin/accounts/:accountId", async (req: Request, res: Response, next: NextFunction) => {
+  const client = await pool.connect();
   try {
     const accountId = parseAccountId(req.params.accountId);
     // 不做"不能删除自己"的独立校验：删除前置条件是已停用，而已停用不能是调用者自己
     // （见 status 接口的 cannotDisableSelf），两条规则组合天然规避（ADR-119）。
-    const result = await deleteAccount(accountId);
+    await client.query("BEGIN");
+    const result = await deleteAccount(accountId, client);
     if (result === "not_found") throw accountNotFound();
     if (result === "not_disabled") throw accountNotDisabled();
-
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await insertOperationLog(client, {
-        operatorId: req.authAccount!.id,
-        action: "account.delete",
-        vehicleId: null,
-        detail: { accountId },
-      });
-      await client.query("COMMIT");
-    } finally {
-      client.release();
-    }
+    await insertOperationLog(client, {
+      operatorId: req.authAccount!.id,
+      action: "account.delete",
+      vehicleId: null,
+      detail: { accountId },
+    });
+    await client.query("COMMIT");
     res.status(204).send();
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
     next(err);
+  } finally {
+    client.release();
   }
 });

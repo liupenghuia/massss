@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { pool } from "./pool";
 
 const SESSION_TTL = "8 hours";
@@ -32,6 +33,6 @@ export async function revokeSession(token: string): Promise<void> {
   await pool.query(`UPDATE admin_sessions SET revoked = TRUE WHERE token = $1`, [token]);
 }
 
-export async function revokeAllSessionsForAccount(accountId: number): Promise<void> {
-  await pool.query(`UPDATE admin_sessions SET revoked = TRUE WHERE account_id = $1`, [accountId]);
+export async function revokeAllSessionsForAccount(accountId: number, client?: PoolClient): Promise<void> {
+  await (client ?? pool).query(`UPDATE admin_sessions SET revoked = TRUE WHERE account_id = $1`, [accountId]);
 }

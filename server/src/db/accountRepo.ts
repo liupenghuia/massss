@@ -97,9 +97,10 @@ export async function recordLoginSuccess(id: number): Promise<void> {
 export async function updatePassword(
   id: number,
   passwordHash: string,
-  mustChangePassword: boolean
+  mustChangePassword: boolean,
+  client?: PoolClient
 ): Promise<void> {
-  await pool.query(
+  await (client ?? pool).query(
     `UPDATE accounts SET password_hash = $2, must_change_password = $3, failed_login_count = 0, locked_until = NULL, updated_at = now() WHERE id = $1`,
     [id, passwordHash, mustChangePassword]
   );
@@ -121,8 +122,8 @@ export async function setAccountEnabled(client: PoolClient, id: number, enabled:
   return normalizeAccountRow(r.rows[0]);
 }
 
-export async function setAccountRole(id: number, role: AccountRole): Promise<AccountRow> {
-  const r = await pool.query<AccountRow>(
+export async function setAccountRole(id: number, role: AccountRole, client?: PoolClient): Promise<AccountRow> {
+  const r = await (client ?? pool).query<AccountRow>(
     `UPDATE accounts SET role = $2, updated_at = now() WHERE id = $1 RETURNING *`,
     [id, role]
   );
@@ -135,14 +136,15 @@ export type DeleteAccountResult = "deleted" | "not_found" | "not_disabled";
  * ADR-119：前置状态检查须用条件更新判断受影响行数，避免并发删除/并发启用的竞态窗口，
  * 不做"先查再改"两步式判断。
  */
-export async function deleteAccount(id: number): Promise<DeleteAccountResult> {
-  const r = await pool.query(
+export async function deleteAccount(id: number, client?: PoolClient): Promise<DeleteAccountResult> {
+  const c = client ?? pool;
+  const r = await c.query(
     `UPDATE accounts SET deleted_at = now() WHERE id = $1 AND enabled = FALSE AND deleted_at IS NULL`,
     [id]
   );
   if (r.rowCount && r.rowCount > 0) return "deleted";
 
-  const check = await pool.query<{ enabled: boolean; deleted_at: Date | null }>(
+  const check = await c.query<{ enabled: boolean; deleted_at: Date | null }>(
     `SELECT enabled, deleted_at FROM accounts WHERE id = $1`,
     [id]
   );
