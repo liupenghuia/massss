@@ -40,6 +40,7 @@ export function VehiclesPanel() {
   const [dragId, setDragId] = useState<number | null>(null);
   const [listLoading, setListLoading] = useState(true);
   const [formBusy, setFormBusy] = useState(false);
+  const [opsBusy, setOpsBusy] = useState<"save" | "publish" | "unpublish" | "trash" | "">("");
   const [covers, setCovers] = useState<Record<number, string>>({});
   const [listPrices, setListPrices] = useState<Record<number, PriceValue | null>>({});
 
@@ -161,9 +162,15 @@ export function VehiclesPanel() {
     }
   }
 
-  async function saveSelected(): Promise<AdminVehicle | null> {
+  async function saveSelected(opts?: { manageBusy?: boolean; successInfo?: string }): Promise<AdminVehicle | null> {
     if (!selected) return null;
+    const manageBusy = opts?.manageBusy !== false;
     setError("");
+    if (manageBusy) {
+      setInfo("");
+      setOpsBusy("save");
+      setFormBusy(true);
+    }
     try {
       const updated = await api<AdminVehicle>(`/admin/vehicles/${selected.id}`, {
         method: "PATCH",
@@ -184,15 +191,40 @@ export function VehiclesPanel() {
       });
       setSelected(updated);
       setForm(vehicleToForm(updated));
-      await load();
+      if (opts?.successInfo) setInfo(opts.successInfo);
+      void load();
       return updated;
     } catch (err) {
       setError(err instanceof Error ? err.message : "保存失败");
       return null;
+    } finally {
+      if (manageBusy) {
+        setFormBusy(false);
+        setOpsBusy("");
+      }
     }
   }
 
-  async function act(path: string, vehicle: AdminVehicle = selected as AdminVehicle) {
+  async function saveAndPublish() {
+    setError("");
+    setInfo("");
+    setOpsBusy("publish");
+    setFormBusy(true);
+    try {
+      const updated = await saveSelected({ manageBusy: false });
+      if (!updated) return;
+      await act("publish", updated, { manageBusy: false });
+    } finally {
+      setFormBusy(false);
+      setOpsBusy("");
+    }
+  }
+
+  async function act(
+    path: string,
+    vehicle: AdminVehicle = selected as AdminVehicle,
+    opts?: { manageBusy?: boolean },
+  ) {
     if (!vehicle) return;
     if (path === "trash") {
       const ok = await confirm({
@@ -203,9 +235,13 @@ export function VehiclesPanel() {
       });
       if (!ok) return;
     }
+    const manageBusy = opts?.manageBusy !== false;
     setError("");
     setInfo("");
-    setFormBusy(true);
+    if (manageBusy) {
+      setOpsBusy(path === "publish" || path === "unpublish" || path === "trash" ? path : "");
+      setFormBusy(true);
+    }
     try {
       const updated = await api<AdminVehicle>(`/admin/vehicles/${vehicle.id}/${path}`, {
         method: "POST",
@@ -222,11 +258,19 @@ export function VehiclesPanel() {
       }
       setSelected(updated);
       setForm(vehicleToForm(updated));
-      await load();
+      if (path === "publish") {
+        setInfo("已保存并发布，前台现在可以看到这辆车");
+      } else if (path === "unpublish") {
+        setInfo("已下架，前台不再展示");
+      }
+      void load();
     } catch (err) {
       setError(describeError(err, "操作失败"));
     } finally {
-      setFormBusy(false);
+      if (manageBusy) {
+        setFormBusy(false);
+        setOpsBusy("");
+      }
     }
   }
 
@@ -444,6 +488,7 @@ export function VehiclesPanel() {
         onDismissError={() => setError("")}
         onDismissInfo={() => setInfo("")}
         formBusy={formBusy}
+        opsBusy={opsBusy}
         publicOrigin={publicOrigin}
         price={price}
         priceType={priceType}
@@ -462,7 +507,12 @@ export function VehiclesPanel() {
         setCopied={setCopied}
         onBack={() => setView("list")}
         onCreate={(e) => void create(e)}
-        onSave={saveSelected}
+        onSave={() =>
+          saveSelected({
+            successInfo: selected?.status === "published" || selected?.status === "unpublished" ? "车辆信息已保存" : "草稿已保存",
+          })
+        }
+        onSaveAndPublish={() => void saveAndPublish()}
         onAct={(path, vehicle) => void act(path, vehicle)}
         onSavePrice={() => void savePrice()}
         onUploadImages={(files) => void uploadImages(files)}

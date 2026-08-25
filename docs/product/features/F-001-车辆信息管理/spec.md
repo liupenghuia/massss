@@ -2,10 +2,10 @@
 id: F-001
 title: 车辆信息管理
 status: implementing
-version: 1.9
+version: 1.11
 owners: []
 contracts: [adminCreateVehicle, adminListVehicles, adminGetVehicle, adminPatchVehicle, adminPublishVehicle, adminUnpublishVehicle, publicListVehicles, publicGetVehicle, VEHICLE_VERSION_CONFLICT, PUBLISH_PRECONDITION_FAILED, ILLEGAL_STATUS_TRANSITION, Idempotency-Key]
-adrs: [ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-007, ADR-010, ADR-023, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-110, ADR-112, ADR-113, ADR-114]
+adrs: [ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-007, ADR-010, ADR-023, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-110, ADR-112, ADR-113, ADR-114, ADR-115, ADR-116]
 rfcs: [docs/rfc/2026-08-24-F-001-管理后台列表聚合封面与当前价.md（Accepted）]
 ---
 
@@ -54,7 +54,9 @@ rfcs: [docs/rfc/2026-08-24-F-001-管理后台列表聚合封面与当前价.md�
 - 图片数量 ≥ 4 张（依赖 F-003 数据）
 - 价格已填写（依赖 F-004 数据，允许填具体数值或"面谈"，只要求非空）
 
-任一条件不满足则拒绝发布，返回明确的缺失项提示。校验逻辑在 F-001 的发布动作里执行。
+任一条件不满足则拒绝发布。服务端返回 `PUBLISH_PRECONDITION_FAILED` 及 `details.missing`
+（images / price / coreFields）。管理后台不得只展示「不满足发布前置条件」，必须按 details
+说明缺什么、当前差在哪、为何不能上架（ADR-116）。校验逻辑在 F-001 的发布动作里执行。
 
 已上架车辆若因 F-003/F-004 数据变动导致事后不再满足以上条件（如图片被删至 4 张以下），
 维持已上架状态不变，不做自动降级或强制提示，这是有意选择而非遗漏（ADR-038）。
@@ -78,6 +80,8 @@ rfcs: [docs/rfc/2026-08-24-F-001-管理后台列表聚合封面与当前价.md�
   错误出现在该字段下方。服务端范围仍以 ADR-038 为准。
 - VIN 创建后只读，并说明「创建后不可修改」。
 - 移入回收站须站内二次确认。
+- 保存草稿 / 保存并发布 / 下架：被点按钮须换进行体文案；成功或失败须在**操作区就地**用成功条/警告条展示（ADR-115）。成功提示不得等列表刷新。静默成功视为缺陷。
+- 发布被拒：操作区须写出具体条件（图≥4 及当前张数、是否已填价、哪些核心字段为空），禁止只显示契约短句（ADR-116）。
 
 ## 边界与限制
 
@@ -111,3 +115,5 @@ rfcs: [docs/rfc/2026-08-24-F-001-管理后台列表聚合封面与当前价.md�
 - v1.8 列表卡片可展示当前价（独立价格接口，非列表字段）；新建/编辑单一 draft 不改变草稿可空/发布校验；明确不做批量下架（ADR-113）
 - v1.9 用户批准 RFC：列表 items 改为 AdminVehicleSummary（coverImageUrl + currentPrice）；
   未设价为 null；回收站列表不加（ADR-114）
+- v1.10 保存草稿/发布/下架须操作区进行态与就地结果，成功不得等列表 N+1（ADR-115）
+- v1.11 发布失败须根据 details 说明缺什么与为什么，禁止只展示「不满足发布前置条件」（ADR-116）

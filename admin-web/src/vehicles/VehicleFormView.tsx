@@ -22,6 +22,7 @@ export type VehicleFormViewProps = {
   onDismissError: () => void;
   onDismissInfo: () => void;
   formBusy: boolean;
+  opsBusy: "save" | "publish" | "unpublish" | "trash" | "";
   publicOrigin: string;
   price: PriceValue | null;
   priceType: "amount" | "negotiable";
@@ -41,6 +42,7 @@ export type VehicleFormViewProps = {
   onBack: () => void;
   onCreate: (e: FormEvent) => void;
   onSave: () => Promise<AdminVehicle | null>;
+  onSaveAndPublish: () => void;
   onAct: (path: string, vehicle?: AdminVehicle) => void;
   onSavePrice: () => void;
   onUploadImages: (files: File[]) => void;
@@ -62,6 +64,7 @@ export function VehicleFormView({
   onDismissError,
   onDismissInfo,
   formBusy,
+  opsBusy,
   publicOrigin,
   price,
   priceType,
@@ -81,6 +84,7 @@ export function VehicleFormView({
   onBack,
   onCreate,
   onSave,
+  onSaveAndPublish,
   onAct,
   onSavePrice,
   onUploadImages,
@@ -616,26 +620,32 @@ export function VehicleFormView({
             <aside className="edit-aside">
               <div className="card elev-sm ops-card">
                 <span className="ops-card-label">操作</span>
+                {error ? (
+                  <p className="banner banner-warn" role="alert">
+                    {error}
+                  </p>
+                ) : null}
+                {info ? (
+                  <p className="banner banner-ok" role="status">
+                    {info}
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   className="btn btn-primary btn-block"
                   disabled={formBusy}
-                  onClick={() =>
-                    void onSave().then((updated) => {
-                      if (updated) return onAct("publish", updated);
-                    })
-                  }
+                  onClick={onSaveAndPublish}
                 >
-                  {formBusy ? "处理中…" : "保存并发布"}
+                  {opsBusy === "publish" ? "保存并发布中…" : "保存并发布"}
                 </button>
                 <button type="button" className="btn btn-secondary btn-block" disabled={formBusy} onClick={() => void onSave()}>
-                  保存草稿
+                  {opsBusy === "save" ? "保存中…" : "保存草稿"}
                 </button>
                 <button type="button" className="btn btn-ghost btn-block" disabled={formBusy} onClick={() => void onAct("unpublish")}>
-                  下架
+                  {opsBusy === "unpublish" ? "下架中…" : "下架"}
                 </button>
                 <button type="button" className="btn btn-ghost btn-block btn-danger-text" disabled={formBusy} onClick={() => void onAct("trash")}>
-                  进回收站
+                  {opsBusy === "trash" ? "处理中…" : "进回收站"}
                 </button>
               </div>
               <div className="card elev-sm ops-card">
