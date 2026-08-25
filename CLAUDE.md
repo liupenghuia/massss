@@ -50,5 +50,8 @@
 
 ## 命令
 构建: cd server && npm run build（或 cd admin-web / cd public-web && npm run build）
-测试: cd server && npm test（Vitest；admin-web / public-web 暂无测试脚手架）
+测试: cd server && npm test（Vitest 单测；admin-web / public-web 暂无测试脚手架）
+集成测试: cd server && npm run test:integration（需本机先建好 mallsss_test 库并跑迁移：
+  createdb mallsss_test && PGDATABASE=mallsss_test npm run migrate:up；目前仅覆盖
+  adminAccounts 路由，见 ADR-120）
 检查文档一致性: python3 scripts/check-docs.py
