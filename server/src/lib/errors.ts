@@ -156,6 +156,10 @@ export function lastSuperAdmin(): AppError {
   return new AppError("LAST_SUPER_ADMIN", 409, "系统必须至少保留一个启用状态的超级管理员");
 }
 
+export function accountNotDisabled(): AppError {
+  return new AppError("ACCOUNT_NOT_DISABLED", 409, "账号当前不是已停用状态，无法删除");
+}
+
 export function accountNotFound(): AppError {
   return new AppError("VALIDATION_ERROR", 404, "账号不存在", {
     fieldErrors: [{ field: "accountId", reason: "NOT_FOUND" }],

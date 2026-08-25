@@ -14,6 +14,7 @@ export type AccountRow = {
   locked_until: Date | null;
   created_at: Date;
   updated_at: Date;
+  deleted_at: Date | null;
 };
 
 /** pg BIGINT 可能是 string，读出后归一为 number。 */
@@ -34,17 +35,20 @@ export function toAdminAccount(row: AccountRow) {
 }
 
 export async function findAccountByLoginName(loginName: string): Promise<AccountRow | null> {
-  const r = await pool.query<AccountRow>(`SELECT * FROM accounts WHERE login_name = $1`, [loginName]);
+  const r = await pool.query<AccountRow>(
+    `SELECT * FROM accounts WHERE login_name = $1 AND deleted_at IS NULL`,
+    [loginName]
+  );
   return r.rows[0] ? normalizeAccountRow(r.rows[0]) : null;
 }
 
 export async function findAccountById(id: number): Promise<AccountRow | null> {
-  const r = await pool.query<AccountRow>(`SELECT * FROM accounts WHERE id = $1`, [id]);
+  const r = await pool.query<AccountRow>(`SELECT * FROM accounts WHERE id = $1 AND deleted_at IS NULL`, [id]);
   return r.rows[0] ? normalizeAccountRow(r.rows[0]) : null;
 }
 
 export async function countAccounts(): Promise<number> {
-  const r = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM accounts`);
+  const r = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM accounts WHERE deleted_at IS NULL`);
   return Number(r.rows[0].n);
 }
 
@@ -61,10 +65,10 @@ export async function insertAccount(
 }
 
 export async function listAccounts(page: number, pageSize: number): Promise<{ rows: AccountRow[]; total: number }> {
-  const totalR = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM accounts`);
+  const totalR = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM accounts WHERE deleted_at IS NULL`);
   const total = Number(totalR.rows[0].n);
   const r = await pool.query<AccountRow>(
-    `SELECT * FROM accounts ORDER BY id ASC LIMIT $1 OFFSET $2`,
+    `SELECT * FROM accounts WHERE deleted_at IS NULL ORDER BY id ASC LIMIT $1 OFFSET $2`,
     [pageSize, (page - 1) * pageSize]
   );
   return { rows: r.rows.map(normalizeAccountRow), total };
@@ -123,6 +127,28 @@ export async function setAccountRole(id: number, role: AccountRole): Promise<Acc
     [id, role]
   );
   return normalizeAccountRow(r.rows[0]);
+}
+
+export type DeleteAccountResult = "deleted" | "not_found" | "not_disabled";
+
+/**
+ * ADR-119：前置状态检查须用条件更新判断受影响行数，避免并发删除/并发启用的竞态窗口，
+ * 不做"先查再改"两步式判断。
+ */
+export async function deleteAccount(id: number): Promise<DeleteAccountResult> {
+  const r = await pool.query(
+    `UPDATE accounts SET deleted_at = now() WHERE id = $1 AND enabled = FALSE AND deleted_at IS NULL`,
+    [id]
+  );
+  if (r.rowCount && r.rowCount > 0) return "deleted";
+
+  const check = await pool.query<{ enabled: boolean; deleted_at: Date | null }>(
+    `SELECT enabled, deleted_at FROM accounts WHERE id = $1`,
+    [id]
+  );
+  const row = check.rows[0];
+  if (!row || row.deleted_at) return "not_found";
+  return "not_disabled";
 }
 
 export async function countActiveSuperAdmins(client?: PoolClient): Promise<number> {

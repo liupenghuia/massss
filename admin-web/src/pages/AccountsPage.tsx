@@ -78,6 +78,23 @@ export function AccountsPage() {
     }
   }
 
+  async function deleteAccount(id: number) {
+    const ok = await confirm({
+      title: "删除该账号？",
+      body: "删除后不可恢复，登录名也无法再被使用。",
+      confirmLabel: "删除账号",
+      danger: true,
+    });
+    if (!ok) return;
+    setError("");
+    try {
+      await api(`/admin/accounts/${id}`, { method: "DELETE" });
+      await loadAccounts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "删除失败");
+    }
+  }
+
   async function resetPassword(id: number) {
     const ok = await confirm({
       title: "重置该账号密码？",
@@ -224,6 +241,11 @@ export function AccountsPage() {
                         <button type="button" className="btn btn-ghost" onClick={() => void resetPassword(a.id)}>
                           重置密码
                         </button>
+                        {!a.enabled ? (
+                          <button type="button" className="btn btn-ghost" onClick={() => void deleteAccount(a.id)}>
+                            删除
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}

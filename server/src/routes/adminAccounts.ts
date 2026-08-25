@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { pool } from "../db/pool";
 import {
   countActiveSuperAdmins,
+  deleteAccount,
   findAccountById,
   insertAccount,
   listAccounts,
@@ -15,6 +16,7 @@ import { insertOperationLog } from "../db/operationLogRepo";
 import { revokeAllSessionsForAccount } from "../db/sessionRepo";
 import {
   accountLoginNameTaken,
+  accountNotDisabled,
   accountNotFound,
   cannotDisableSelf,
   lastSuperAdmin,
@@ -217,6 +219,34 @@ adminAccountsRouter.post("/admin/accounts/:accountId/password-reset", async (req
       client.release();
     }
     res.status(200).json({ account: toAdminAccount(updated!), initialPassword });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminAccountsRouter.delete("/admin/accounts/:accountId", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const accountId = parseAccountId(req.params.accountId);
+    // 不做"不能删除自己"的独立校验：删除前置条件是已停用，而已停用不能是调用者自己
+    // （见 status 接口的 cannotDisableSelf），两条规则组合天然规避（ADR-119）。
+    const result = await deleteAccount(accountId);
+    if (result === "not_found") throw accountNotFound();
+    if (result === "not_disabled") throw accountNotDisabled();
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await insertOperationLog(client, {
+        operatorId: req.authAccount!.id,
+        action: "account.delete",
+        vehicleId: null,
+        detail: { accountId },
+      });
+      await client.query("COMMIT");
+    } finally {
+      client.release();
+    }
+    res.status(204).send();
   } catch (err) {
     next(err);
   }

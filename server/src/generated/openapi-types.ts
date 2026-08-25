@@ -749,7 +749,24 @@ export interface paths {
          *     6. 以上均不命中 → 执行变更，停用时作废该账号全部现有会话（同步一致失效，见 securityScheme）
          */
         post: operations["adminSetAccountStatus"];
-        delete?: never;
+        /**
+         * 删除账号（软删除，仅超管，ADR-119）
+         * @description 仅 super_admin 可调用。软删除：账号打 deleted_at 标记，不物理清除行，不可恢复。
+         *
+         *     前置条件：目标账号必须是"已停用"（disabled）状态，否则 409。
+         *     "不能删除自己"不作为独立校验规则：ADR-026 已禁止"停用自己"，而删除的前置条件是
+         *     "已停用"，两条规则组合后超管天然无法把自己降到可删状态，属于隐含防御。
+         *
+         *     删除后该账号的 loginName 永久占用不释放，不可被新账号复用，与账号创建/停用接口
+         *     既有的 loginName 永久占用规则一致。
+         *
+         *     重复调用同一个已删除账号返回 404（不是幂等成功）——删除是不可逆操作，需要明确反馈。
+         *
+         *     **实现提示**：服务端判断前置条件时应使用数据库层条件更新（如
+         *     `UPDATE ... WHERE id=? AND status='disabled' AND deleted_at IS NULL` 判断受影响行数），
+         *     而非先查询状态再更新的两步式判断，避免并发场景下的竞态。
+         */
+        delete: operations["adminDeleteAccount"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1368,7 +1385,7 @@ export interface components {
          * @description 稳定错误码。客户端应按 code 分支，不要解析 message（除已声明为固定文案的码）。
          * @enum {string}
          */
-        ErrorCode: "VEHICLE_NOT_FOUND" | "IMAGE_NOT_FOUND" | "REPORT_NOT_FOUND" | "VEHICLE_VERSION_CONFLICT" | "ILLEGAL_STATUS_TRANSITION" | "PUBLISHED_IMAGE_MIN" | "IDEMPOTENCY_KEY_CONFLICT" | "PUBLISH_PRECONDITION_FAILED" | "VALIDATION_ERROR" | "MISSING_VERSION" | "IDEMPOTENCY_KEY_REQUIRED" | "INVALID_OBJECT_KEY" | "INVALID_CONTENT_TYPE" | "FILE_TOO_LARGE" | "IMAGE_ORDER_MISMATCH" | "OBJECT_NOT_UPLOADED" | "UNAUTHORIZED" | "INTERNAL_ERROR" | "RECYCLE_BIN_ITEM_PURGED" | "VEHICLE_NOT_IN_RECYCLE_BIN" | "VEHICLE_IN_RECYCLE_BIN" | "FORBIDDEN" | "MUST_CHANGE_PASSWORD" | "INVALID_CREDENTIALS" | "ACCOUNT_DISABLED" | "ACCOUNT_LOCKED" | "ACCOUNT_LOGIN_NAME_TAKEN" | "CANNOT_DISABLE_SELF" | "LAST_SUPER_ADMIN" | "TOO_MANY_REQUESTS" | "VEHICLE_VIN_DUPLICATE";
+        ErrorCode: "VEHICLE_NOT_FOUND" | "IMAGE_NOT_FOUND" | "REPORT_NOT_FOUND" | "VEHICLE_VERSION_CONFLICT" | "ILLEGAL_STATUS_TRANSITION" | "PUBLISHED_IMAGE_MIN" | "IDEMPOTENCY_KEY_CONFLICT" | "PUBLISH_PRECONDITION_FAILED" | "VALIDATION_ERROR" | "MISSING_VERSION" | "IDEMPOTENCY_KEY_REQUIRED" | "INVALID_OBJECT_KEY" | "INVALID_CONTENT_TYPE" | "FILE_TOO_LARGE" | "IMAGE_ORDER_MISMATCH" | "OBJECT_NOT_UPLOADED" | "UNAUTHORIZED" | "INTERNAL_ERROR" | "RECYCLE_BIN_ITEM_PURGED" | "VEHICLE_NOT_IN_RECYCLE_BIN" | "VEHICLE_IN_RECYCLE_BIN" | "FORBIDDEN" | "MUST_CHANGE_PASSWORD" | "INVALID_CREDENTIALS" | "ACCOUNT_DISABLED" | "ACCOUNT_LOCKED" | "ACCOUNT_LOGIN_NAME_TAKEN" | "CANNOT_DISABLE_SELF" | "LAST_SUPER_ADMIN" | "ACCOUNT_NOT_DISABLED" | "TOO_MANY_REQUESTS" | "VEHICLE_VIN_DUPLICATE";
         ErrorResponse: {
             code: components["schemas"]["ErrorCode"];
             /** @description 面向调用方的说明。VEHICLE_VERSION_CONFLICT、PUBLISHED_IMAGE_MIN 的 message 固定，不得改写。 */
@@ -2883,6 +2900,55 @@ export interface operations {
                 };
             };
             /** @description 尝试停用最后一个启用超管 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    adminDeleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功，无响应体 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description 非超管调用（FORBIDDEN） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 账号不存在，或已被软删除 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 账号当前不是已停用状态 */
             409: {
                 headers: {
                     [name: string]: unknown;
